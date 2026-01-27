@@ -9,6 +9,8 @@ plugins:
   - remote: buf.build/bufbuild/es:v1.10.0
     out: frontend/src/gen
     opt: target=ts,import_extension=.ts
+    include_imports: true
+    include_wkt: true
   - remote: buf.build/connectrpc/es
     out: frontend/src/gen
     opt: target=ts,import_extension=.ts

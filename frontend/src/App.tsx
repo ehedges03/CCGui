@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createConnectTransport } from "@connectrpc/connect-web";
-import { createPromiseClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { HelloService } from "@/gen/hello/v1/hello_connect";
 import { Button } from "@/components/ui/button";
 
@@ -9,8 +9,9 @@ const transport = createConnectTransport({
 });
 
 export default function App() {
-  const client = useMemo(() => createPromiseClient(HelloService, transport), []);
-  const [name, setName] = useState("world");
+  const client = useMemo(() => createClient(HelloService, transport), []);
+  const [aValue, setAValue] = useState("");
+  const [bValue, setBValue] = useState("");
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -19,10 +20,37 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const res = await client.say({ name });
-      setMessage(res.message);
+      const request: { a?: number; b?: number } = {};
+      if (aValue !== "") {
+        const parsed = Number(aValue);
+        if (Number.isNaN(parsed)) {
+          setError("a must be a number");
+          return;
+        }
+        request.a = parsed;
+      }
+      if (bValue !== "") {
+        const parsed = Number(bValue);
+        if (Number.isNaN(parsed)) {
+          setError("b must be a number");
+          return;
+        }
+        request.b = parsed;
+      }
+
+      const res = await client.say(request);
+      setMessage(res.message ?? "");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      const connectErr = ConnectError.from(err);
+      if (connectErr.code === Code.InvalidArgument) {
+        setError("a and b must be numbers");
+        return;
+      }
+      if (connectErr.code === Code.OutOfRange) {
+        setError("a * b is too large");
+        return;
+      }
+      setError(connectErr.message);
     } finally {
       setLoading(false);
     }
@@ -38,21 +66,36 @@ export default function App() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <label className="text-sm font-medium text-slate-300" htmlFor="name">
-            Name
-          </label>
-          <input
-            id="name"
-            className="rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-slate-100"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-slate-300" htmlFor="a">
+              a
+            </label>
+            <input
+              id="a"
+              type="number"
+              className="rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-slate-100"
+              value={aValue}
+              onChange={(event) => setAValue(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-slate-300" htmlFor="b">
+              b
+            </label>
+            <input
+              id="b"
+              type="number"
+              className="rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-slate-100"
+              value={bValue}
+              onChange={(event) => setBValue(event.target.value)}
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
           <Button onClick={onSayHello} disabled={loading}>
-            {loading ? "Calling..." : "Say hello"}
+            {loading ? "Calling..." : "Multiply"}
           </Button>
           {message ? <span className="text-slate-200">{message}</span> : null}
         </div>

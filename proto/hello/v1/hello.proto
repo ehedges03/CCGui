@@ -2,14 +2,15 @@ syntax = "proto3";
 
 package hello.v1;
 
-option go_package = "example.com/ccgui-template/backend/gen/hello/v1;hellov1";
+option go_package = "ehedges.net/ccgui/backend/gen/hello/v1;hellov1";
 
 service HelloService {
   rpc Say(SayRequest) returns (SayResponse) {}
 }
 
 message SayRequest {
-  string name = 1;
+  optional int32 a = 1;
+  optional int32 b = 2;
 }
 
 message SayResponse {

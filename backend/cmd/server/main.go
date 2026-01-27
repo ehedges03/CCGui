@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"example.com/ccgui-template/backend/gen/hello/v1/hellov1connect"
-	"example.com/ccgui-template/backend/internal/handler"
+	"ehedges.net/ccgui/backend/gen/hello/v1/hellov1connect"
+	"ehedges.net/ccgui/backend/internal/handler"
 )
 
 func main() {
