@@ -16,7 +16,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":8080",
-		Handler:           withCORS(mux),
+		Handler:           withLogging(withCORS(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -40,5 +40,27 @@ func withCORS(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func withLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		recorder := &statusRecorder{
+			ResponseWriter: w,
+			status:         http.StatusOK,
+		}
+		next.ServeHTTP(recorder, r)
+		log.Printf("%s %s %d %s", r.Method, r.URL.Path, recorder.status, time.Since(start))
 	})
 }

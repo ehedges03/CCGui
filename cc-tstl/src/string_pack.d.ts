@@ -1,3 +1,5 @@
+/** @noSelfInFile */
+
 /**
  * Lua string.pack compatibility helpers implemented in `string_pack.lua`.
  */

@@ -215,7 +215,7 @@ for (let i = 1; i <= foundMonitors.n; i++) {
 
 peripheral.call = ((name: string, method: string, ...args: unknown[]) => {
     const entry = monitorsByName[name];
-    if (entry) {
+    if (entry !== undefined) {
         return (entry.window as unknown as Record<string, (...args: unknown[]) => unknown>)[method](...args);
     }
     return basePeripheralCall(name, method, ...args);

@@ -6,6 +6,7 @@ option go_package = "ehedges.net/ccgui/backend/gen/hello/v1;hellov1";
 
 service HelloService {
   rpc Say(SayRequest) returns (SayResponse) {}
+  rpc Greet(GreetRequest) returns (GreetResponse) {}
 }
 
 message SayRequest {
@@ -14,5 +15,13 @@ message SayRequest {
 }
 
 message SayResponse {
+  string message = 1;
+}
+
+message GreetRequest {
+  string name = 1;
+}
+
+message GreetResponse {
   string message = 1;
 }

@@ -1,3 +1,4 @@
+/** @noSelfInFile */
 export {};
 
 declare global {

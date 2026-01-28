@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -43,6 +45,27 @@ func (s *HelloServer) Say(
 
 	res := connect.NewResponse(&hellov1.SayResponse{
 		Message: fmt.Sprintf("Result: %d", a*b),
+	})
+	res.Header().Set("X-Hello-Server", "connectrpc")
+	return res, nil
+}
+
+func (s *HelloServer) Greet(
+	ctx context.Context,
+	req *connect.Request[hellov1.GreetRequest],
+) (*connect.Response[hellov1.GreetResponse], error) {
+	name := strings.TrimSpace(req.Msg.GetName())
+	if name == "" {
+		return nil, connect.NewError(
+			connect.CodeInvalidArgument,
+			errors.New("missing required field: name"),
+		)
+	}
+
+	log.Printf("greet request name=%q", name)
+
+	res := connect.NewResponse(&hellov1.GreetResponse{
+		Message: fmt.Sprintf("Hello, %s!", name),
 	})
 	res.Header().Set("X-Hello-Server", "connectrpc")
 	return res, nil
