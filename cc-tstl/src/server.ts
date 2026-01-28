@@ -11,11 +11,6 @@ const REMOTE_WS_BASE_URL = "wss://remote.craftos-pc.cc/";
 const REMOTE_HTTP_BASE_URL = "https://remote.craftos-pc.cc/";
 const RAWTERM_EXPECTED_SIZE = 31339;
 
-function stringMatch(value: string, pattern: string): string | undefined {
-    const result = string.match(value, pattern) as unknown as LuaMultiReturn<[string]>;
-    return result ? result[0] : undefined;
-}
-
 function versionToParts(version: string): [number, number, number] {
     const parts = version.split(".");
     return [parseInt(parts[0] ?? "0"), parseInt(parts[1] ?? "0"), parseInt(parts[2] ?? "0")];
@@ -30,6 +25,7 @@ function requireMinVersion(minVersion: string): void {
     } else {
         version = string.match(_HOST, "ComputerCraft ([0-9%.]+)")[0];
     }    
+
     if (!version) {
         error("Could not determine version of ComputerCraft");
     } else {
@@ -108,7 +104,7 @@ function wrapDelegate(base: RawtermDelegate): RawtermDelegate {
             let expectedLength: number | undefined;
             while (expectedLength === undefined || packet.length < expectedLength + 16 + (string.sub(packet, 1, 4) === "!CPD" ? 8 : 0)) {
                 let [ok, rawResult] = pcall(baseReceive, base, timeout);
-                while (!ok && typeof rawResult === "string" && stringMatch(rawResult, "Terminated$")) {
+                while (!ok && typeof rawResult === "string" && string.match(rawResult, "Terminated$")) {
                     [ok, rawResult] = pcall(baseReceive, base, timeout);
                 }
                 if (!ok) error(rawResult as string);
@@ -117,8 +113,8 @@ function wrapDelegate(base: RawtermDelegate): RawtermDelegate {
                 if (expectedLength === undefined) {
                     const longPattern = "!CPD(" + string.rep("%x", 12) + ")";
                     expectedLength = tonumber(
-                        stringMatch(result, "!CPC(%x%x%x%x)") ??
-                            stringMatch(result, longPattern) ??
+                        string.match(result, "!CPC(%x%x%x%x)") ??
+                            string.match(result, longPattern) ??
                             "",
                         16
                     );
@@ -324,6 +320,6 @@ for (const [, entry] of pairs(monitorsByName)) {
 mainWindow.close();
 peripheral.call = basePeripheralCall;
 shell.run("clear");
-if (runtimeError && !stringMatch(runtimeError, "attempt to use closed file")) {
+if (runtimeError && !string.match(runtimeError, "attempt to use closed file")) {
     printError(runtimeError);
 }
