@@ -1,5 +1,9 @@
 // You may comment out any events you don't need to save space. Make sure to
 // delete them from eventInitializers as well.
+import type {
+    MetricsData,
+    ResourceMetrics,
+} from "./metrics";
 
 export interface IEvent {
     get_name(): string;
@@ -521,6 +525,281 @@ export class GenericEvent implements IEvent {
     }
 }
 
+export class LogLevel {
+    public static readonly TRACE = new LogLevel(0, "TRACE");
+    public static readonly DEBUG = new LogLevel(1, "DEBUG");
+    public static readonly INFO = new LogLevel(2, "INFO");
+    public static readonly WARNING = new LogLevel(3, "WARNING");
+    public static readonly ERROR = new LogLevel(4, "ERROR");
+    public static readonly CRITICAL = new LogLevel(5, "CRITICAL");
+    
+    private static readonly LEVELS = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARNING, LogLevel.ERROR];
+    public static fromLevel(level: number): LogLevel {
+        if (level < 0 || level >= LogLevel.LEVELS.length) {
+            throw new Error(`Invalid log level: ${level}`);
+        }
+        return LogLevel.LEVELS[level];
+    }
+
+    private constructor(private readonly level: number, private readonly name: string) {}
+
+    public getLevel(): number {
+        return this.level;
+    }
+    
+    public getName(): string {
+        return this.name;
+    }
+}
+
+export class LogEvent implements IEvent {
+    public static TYPES = ["log"];
+    public level: LogLevel = LogLevel.DEBUG;
+    public message: string = "";
+    public info?: Partial<debug.FunctionInfo>;
+    public trace?: Partial<debug.FunctionInfo>[];
+    public get_name() {
+        return "log";
+    }
+    public get_args() {
+        return [this.level.getLevel(), this.message, this.info, this.trace];
+    }
+    public static init(args: any[]): IEvent | null {
+        if (
+            !(typeof args[0] === "string") ||
+            (args[0] as string) != "log" ||
+            typeof args[1] !== "number" || 
+            typeof args[2] !== "string" ||
+            (args[3] !== undefined && typeof args[3] !== "object") ||
+            (args[4] !== undefined && typeof args[4] !== "object")
+        )
+            throw "Invalid event type";
+        let ev = new LogEvent();
+        ev.level = LogLevel.fromLevel(args[1]);
+        ev.message = args[2];
+        ev.info = args[3] as Partial<debug.FunctionInfo>;
+        ev.trace = args[4] as Partial<debug.FunctionInfo>[];
+        return ev;
+    }
+    public static emit(level: LogLevel, message: string, info?: Partial<debug.FunctionInfo>, trace?: Partial<debug.FunctionInfo>[]) {
+        os.queueEvent("log", level, message, info, trace);
+    }
+}
+
+export class MetricEvent implements IEvent {
+    public static TYPES = ["metric"];
+    public data: MetricsData = { resource_metrics: [] };
+    public get_name() {
+        return "metric";
+    }
+    public get_args() {
+        return [this.data];
+    }
+    public static init(args: any[]): IEvent | null {
+        if (
+            !(typeof args[0] === "string") ||
+            (args[0] as string) != "metric"
+        )
+            throw "Invalid event type";
+        let ev = new MetricEvent();
+        ev.data = (args[1] as MetricsData) ?? { resource_metrics: [] };
+        return ev;
+    }
+    public static emit(data: MetricsData) {
+        os.queueEvent("metric", data);
+    }
+}
+
+export class MetricRegisterEvent implements IEvent {
+    public static TYPES = ["metric_register"];
+    public publisher_id: string = "";
+    public get_name() {
+        return "metric_register";
+    }
+    public get_args() {
+        return [this.publisher_id];
+    }
+    public static init(args: any[]): IEvent | null {
+        if (
+            !(typeof args[0] === "string") ||
+            (args[0] as string) != "metric_register"
+        )
+            throw "Invalid event type";
+        let ev = new MetricRegisterEvent();
+        ev.publisher_id = args[1] as string;
+        return ev;
+    }
+    public static emit(publisherId: string) {
+        os.queueEvent("metric_register", publisherId);
+    }
+}
+
+export class MetricUnregisterEvent implements IEvent {
+    public static TYPES = ["metric_unregister"];
+    public publisher_id: string = "";
+    public get_name() {
+        return "metric_unregister";
+    }
+    public get_args() {
+        return [this.publisher_id];
+    }
+    public static init(args: any[]): IEvent | null {
+        if (
+            !(typeof args[0] === "string") ||
+            (args[0] as string) != "metric_unregister"
+        )
+            throw "Invalid event type";
+        let ev = new MetricUnregisterEvent();
+        ev.publisher_id = args[1] as string;
+        return ev;
+    }
+    public static emit(publisherId: string) {
+        os.queueEvent("metric_unregister", publisherId);
+    }
+}
+
+export class MetricCollectEvent implements IEvent {
+    public static TYPES = ["metric_collect"];
+    public request_id: number = 0;
+    public collection_time_unix_nano: number = 0;
+    public get_name() {
+        return "metric_collect";
+    }
+    public get_args() {
+        return [this.request_id, this.collection_time_unix_nano];
+    }
+    public static init(args: any[]): IEvent | null {
+        if (
+            !(typeof args[0] === "string") ||
+            (args[0] as string) != "metric_collect"
+        )
+            throw "Invalid event type";
+        let ev = new MetricCollectEvent();
+        ev.request_id = args[1] as number;
+        ev.collection_time_unix_nano = args[2] as number;
+        return ev;
+    }
+    public static emit(requestId: number, collectionTimeUnixNano: number) {
+        os.queueEvent("metric_collect", requestId, collectionTimeUnixNano);
+    }
+}
+
+export class MetricResponseEvent implements IEvent {
+    public static TYPES = ["metric_response"];
+    public request_id: number = 0;
+    public publisher_id: string = "";
+    public resource_metrics: ResourceMetrics[] = [];
+    public get_name() {
+        return "metric_response";
+    }
+    public get_args() {
+        return [this.request_id, this.publisher_id, this.resource_metrics];
+    }
+    public static init(args: any[]): IEvent | null {
+        if (
+            !(typeof args[0] === "string") ||
+            (args[0] as string) != "metric_response"
+        )
+            throw "Invalid event type";
+        let ev = new MetricResponseEvent();
+        ev.request_id = args[1] as number;
+        ev.publisher_id = args[2] as string;
+        ev.resource_metrics = (args[3] as ResourceMetrics[]) ?? [];
+        return ev;
+    }
+    public static emit(
+        requestId: number,
+        publisherId: string,
+        resourceMetrics: ResourceMetrics[],
+    ) {
+        os.queueEvent("metric_response", requestId, publisherId, resourceMetrics);
+    }
+}
+
+export interface MetricProvider {
+    (requestId: number, collectionTimeUnixNano: number): ResourceMetrics[] | null;
+}
+
+export interface MetricCollectorOptions {
+    interval_seconds: number;
+    response_timeout_seconds?: number;
+    on_flush?: (data: MetricsData) => void;
+}
+
+export function runMetricProvider(
+    publisherId: string,
+    provider: MetricProvider,
+) {
+    MetricRegisterEvent.emit(publisherId);
+    while (true) {
+        const ev = pullEventAs(MetricCollectEvent, "metric_collect");
+        if (!ev) continue;
+        const response = provider(ev.request_id, ev.collection_time_unix_nano);
+        if (response && response.length > 0) {
+            MetricResponseEvent.emit(ev.request_id, publisherId, response);
+        } else {
+            MetricResponseEvent.emit(ev.request_id, publisherId, []);
+        }
+    }
+}
+
+export function runMetricCollector(options: MetricCollectorOptions) {
+    const publisherIds: Record<string, true> = {};
+    let requestId = 1;
+    const intervalSeconds = math.max(0.05, options.interval_seconds);
+    const responseTimeout = options.response_timeout_seconds ?? intervalSeconds * 0.5;
+    let timerId = os.startTimer(intervalSeconds);
+    while (true) {
+        const raw = pullEventRaw();
+        if (!raw) continue;
+        if (raw instanceof MetricRegisterEvent) {
+            publisherIds[raw.publisher_id] = true;
+        } else if (raw instanceof MetricUnregisterEvent) {
+            delete publisherIds[raw.publisher_id];
+        } else if (raw instanceof TimerEvent && raw.id === timerId) {
+            const currentTimeUnixNano = os.epoch("utc") * 1_000_000;
+            const currentRequestId = requestId;
+            requestId += 1;
+            MetricCollectEvent.emit(currentRequestId, currentTimeUnixNano);
+
+            const expected = Object.keys(publisherIds).length;
+            const received: Record<string, true> = {};
+            const collected: ResourceMetrics[] = [];
+            let timeoutTimerId = os.startTimer(responseTimeout);
+
+            while (Object.keys(received).length < expected) {
+                const collectEvent = pullEventRaw();
+                if (!collectEvent) continue;
+                if (collectEvent instanceof MetricResponseEvent) {
+                    if (collectEvent.request_id !== currentRequestId) continue;
+                    if (!received[collectEvent.publisher_id]) {
+                        received[collectEvent.publisher_id] = true;
+                        for (const entry of collectEvent.resource_metrics) {
+                            collected.push(entry);
+                        }
+                    }
+                } else if (collectEvent instanceof MetricRegisterEvent) {
+                    publisherIds[collectEvent.publisher_id] = true;
+                } else if (collectEvent instanceof MetricUnregisterEvent) {
+                    delete publisherIds[collectEvent.publisher_id];
+                } else if (collectEvent instanceof TimerEvent && collectEvent.id === timeoutTimerId) {
+                    break;
+                }
+            }
+
+            const payload: MetricsData = { resource_metrics: collected };
+            if (options.on_flush) {
+                options.on_flush(payload);
+            } else {
+                MetricEvent.emit(payload);
+            }
+            timerId = os.startTimer(intervalSeconds);
+        } else if (raw instanceof TerminateEvent) {
+            break;
+        }
+    }
+}
+
 let eventInitializers: Record<string, (args: any[]) => IEvent | null> = {}
 
 CharEvent.TYPES.forEach(type => {
@@ -577,6 +856,21 @@ SpeakerAudioEmptyEvent.TYPES.forEach(type => {
 ComputerCommandEvent.TYPES.forEach(type => {
     eventInitializers[type] = ComputerCommandEvent.init;
 });
+MetricEvent.TYPES.forEach(type => {
+    eventInitializers[type] = MetricEvent.init;
+});
+MetricRegisterEvent.TYPES.forEach(type => {
+    eventInitializers[type] = MetricRegisterEvent.init;
+});
+MetricUnregisterEvent.TYPES.forEach(type => {
+    eventInitializers[type] = MetricUnregisterEvent.init;
+});
+MetricCollectEvent.TYPES.forEach(type => {
+    eventInitializers[type] = MetricCollectEvent.init;
+});
+MetricResponseEvent.TYPES.forEach(type => {
+    eventInitializers[type] = MetricResponseEvent.init;
+});
 
 
 type Constructor<T extends {} = {}> = new (...args: any[]) => T;
@@ -608,3 +902,4 @@ export function pullEventAs<T extends IEvent>(
     if (ev instanceof type) return ev as T;
     else return null;
 }
+

@@ -1,6 +1,6 @@
-import type { RawtermDelegate, RawtermRenderTarget, RawtermServerWindow } from "./rawterm";
+import type { RawtermDelegate, RawtermRenderTarget, RawtermServerWindow } from "./api/rawterm";
 
-type RawtermModule = typeof import("./rawterm");
+type RawtermModule = typeof import("./api/rawterm");
 
 declare const _CC_VERSION: string | undefined;
 declare const _HOST: string | undefined;

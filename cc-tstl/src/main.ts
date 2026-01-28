@@ -1,4 +1,4 @@
-import * as event from "./event";
+import * as event from "./api/event";
 
 // Put your code here
 const left = peripheral.wrap("left") as CommandPeripheral;

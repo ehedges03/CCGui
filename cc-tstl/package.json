@@ -5,7 +5,7 @@
   "main": "main.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tstl && cp src/*.lua dist/"
+    "build": "tstl && rsync -a --include '*/' --include '*.lua' --exclude '*' src/ dist/"
   },
   "devDependencies": {
     "typescript": "^5.1.0",
