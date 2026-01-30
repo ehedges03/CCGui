@@ -1,12 +1,18 @@
 import * as event from "./api/event";
 
+export let running = true;
+
 // Put your code here
 const left = peripheral.wrap("left") as CommandPeripheral;
 left.setCommand("kill @e");
 left.runCommand();
 
-const timer = os.startTimer(5);
-while(true) {
-    const ev = event.pullEventAs(event.TimerEvent, "timer");
-    if (ev && ev.id == timer) break;
-}
+event.runMetricCollector({
+    interval_seconds: 1,
+    response_timeout_seconds: 1,
+    on_flush: (data) => {
+        print(textutils.serialiseJSON(data));
+    },
+});
+
+("Hello, world!");

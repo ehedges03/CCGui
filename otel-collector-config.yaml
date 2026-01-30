@@ -1,0 +1,30 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
+exporters:
+  clickhouse:
+    endpoint: http://clickhouse:8123
+    database: otel
+    username: otel
+    password: otel
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]

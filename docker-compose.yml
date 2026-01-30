@@ -1,0 +1,26 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    environment:
+      CLICKHOUSE_DB: otel
+      CLICKHOUSE_USER: otel
+      CLICKHOUSE_PASSWORD: otel
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - clickhouse
+
+volumes:
+  clickhouse_data:

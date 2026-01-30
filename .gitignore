@@ -18,3 +18,4 @@ frontend/node_modules/
 frontend/src/gen/
 node_modules/
 pkg/
+.volumes/

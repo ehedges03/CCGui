@@ -1,5 +1,6 @@
 // You may comment out any events you don't need to save space. Make sure to
 // delete them from eventInitializers as well.
+import { running } from "../main";
 import type {
     MetricsData,
     ResourceMetrics,
@@ -749,7 +750,7 @@ export function runMetricCollector(options: MetricCollectorOptions) {
     const intervalSeconds = math.max(0.05, options.interval_seconds);
     const responseTimeout = options.response_timeout_seconds ?? intervalSeconds * 0.5;
     let timerId = os.startTimer(intervalSeconds);
-    while (true) {
+    while (running) {
         const raw = pullEventRaw();
         if (!raw) continue;
         if (raw instanceof MetricRegisterEvent) {

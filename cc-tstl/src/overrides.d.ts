@@ -1,3 +1,4 @@
+/** @noSelfInFile */
 export {};
 
 declare global {
@@ -13,7 +14,7 @@ declare global {
         function match(
             s: string,
             pattern: string,
-            init?: number
+            init?: number,
         ): LuaMultiReturn<string[] | [undefined]>;
 
         /**
@@ -25,7 +26,10 @@ declare global {
          */
         function gmatch(
             s: string,
-            pattern: string
-        ): LuaIterable<LuaMultiReturn<string[] | [undefined]>>;
+            pattern: string,
+        ): LuaIterable<LuaMultiReturn<string[]>>;
     }
+
+    /** @customName bit32 */
+    const bit: typeof bit32;
 }
