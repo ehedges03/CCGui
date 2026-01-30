@@ -1,4 +1,4 @@
-package handler
+package controller
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	hellov1 "ehedges.net/ccgui/backend/gen/hello/v1"
 )
 
-type HelloServer struct{}
+type HelloController struct{}
 
-func (s *HelloServer) Say(
+func (s *HelloController) Say(
 	ctx context.Context,
 	req *connect.Request[hellov1.SayRequest],
 ) (*connect.Response[hellov1.SayResponse], error) {
@@ -50,7 +50,7 @@ func (s *HelloServer) Say(
 	return res, nil
 }
 
-func (s *HelloServer) Greet(
+func (s *HelloController) Greet(
 	ctx context.Context,
 	req *connect.Request[hellov1.GreetRequest],
 ) (*connect.Response[hellov1.GreetResponse], error) {

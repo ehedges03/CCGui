@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package auth.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "ehedges.net/ccgui/backend/gen/auth/v1;authv1";
+
+// AuthService manages API keys used to authenticate websocket clients.
+service AuthService {
+  // GenerateKey creates a new API key and returns it once.
+  rpc GenerateKey(GenerateKeyRequest) returns (GenerateKeyResponse) {}
+  // DeleteKey deletes an API key by id and returns its summary.
+  rpc DeleteKey(DeleteKeyRequest) returns (DeleteKeyResponse) {}
+  // GetAllKeys lists all stored API key summaries.
+  rpc GetAllKeys(GetAllKeysRequest) returns (GetAllKeysResponse) {}
+}
+
+// Key is a secret API key.
+message Key {
+  // Unique identifier for the key.
+  string id = 1;
+  // Human-readable name for the key.
+  string name = 2;
+  // Secret API key value. Returned once at creation time.
+  string key = 3;
+}
+
+// KeySummary is a non-sensitive view of an API key.
+message KeySummary {
+  // Unique identifier for the key.
+  string id = 1;
+  // Human-readable name for the key.
+  string name = 2;
+}
+
+message GenerateKeyRequest {
+  // Human-readable name for the new key.
+  string name = 1;
+}
+
+message GenerateKeyResponse {
+  // The newly created key.
+  Key key = 1;
+}
+
+message DeleteKeyRequest {
+  // Unique identifier for the key to delete.
+  string id = 1;
+}
+
+message DeleteKeyResponse {
+  // Summary of the deleted key.
+  KeySummary summary = 1;
+}
+
+message GetAllKeysResponse {
+  // List of all stored key summaries.
+  repeated KeySummary keys = 1;
+}
+
+message GetAllKeysRequest {}
