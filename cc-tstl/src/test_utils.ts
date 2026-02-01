@@ -35,12 +35,16 @@ print(textutils.serialiseJSON(unpackedObject));
 
 const parsedObject = testObjectSchema.parse(unpackedObject);
 
-const failParse = testObjectSchema.safeParse({
-    name: "John",
-    age: "30",
-    city: "New York",
-});
+// const failParse = testObjectSchema.safeParse({
+//     name: "John",
+//     age: "30",
+//     city: 1,
+// });
 
-print(textutils.serialiseJSON(failParse));
+// print(textutils.serialiseJSON(failParse));
 
 assert(parsedObject.name === testObject.name && parsedObject.age === testObject.age && parsedObject.city === testObject.city, "Unpacked object does not match test object");
+
+const websocketClosedArgsSchema = z.literalArray([z.literal("websocket_closed"), z.string(), z.string().default(undefined), z.number().default(undefined)])
+let fail = websocketClosedArgsSchema.safeParse(["websocket_closed", "url"])
+print(textutils.serialiseJSON(fail))

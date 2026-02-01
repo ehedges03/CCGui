@@ -12,5 +12,5 @@ declare module "cc.shell.completion" {
     export function side(shell: Object|LuaTable, text: string, previous: string[], add_space?: boolean): string[];
     export function setting(shell: Object|LuaTable, text: string, previous: string[], add_space?: boolean): string[];
     export function command(shell: Object|LuaTable, text: string, previous: string[], add_space?: boolean): string[];
-    export function build(...args: (null | ((text: string, previous: string[]) => string[]) | [(text: string, previous: string[], ...args: any[]) => string[], ...any[]])[]): (index: number, arg: string, previous: string[]) => string[];
+    export function build(...args: (undefined | ((text: string, previous: string[]) => string[]) | [(text: string, previous: string[], ...args: any[]) => string[], ...any[]])[]): (index: number, arg: string, previous: string[]) => string[];
 }

@@ -1,15 +1,23 @@
 // You may comment out any events you don't need to save space. Make sure to
 // delete them from eventInitializers as well.
-import { running } from "../main";
-import type {
-    MetricsData,
-    ResourceMetrics,
-} from "./metrics";
+// import { running } from "../main";
+import { z, type Schema } from "../zod-lite";
+import type { MetricsData, ResourceMetrics } from "./metrics";
+
+const parseEventArgs = <T>(args: unknown[], schema: Schema<T>): T => {
+    const parsed = schema.safeParse(args);
+    if (!parsed.success) {
+        throw "Invalid event type";
+    }
+    return parsed.data;
+};
 
 export interface IEvent {
     get_name(): string;
     get_args(): any[];
 }
+
+const charArgsSchema = z.literalArray([z.literal("char"), z.string()]);
 
 export class CharEvent implements IEvent {
     public static TYPES = ["char"];
@@ -20,14 +28,18 @@ export class CharEvent implements IEvent {
     public get_args() {
         return [this.character];
     }
-    public static init(args: any[]): IEvent | null {
-        if (!(typeof args[0] === "string") || (args[0] as string) != "char")
-            return null;
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, character] = parseEventArgs(args, charArgsSchema);
         let ev = new CharEvent();
-        ev.character = args[1] as string;
+        ev.character = character;
         return ev;
     }
 }
+
+const keyArgsSchema = z.union([
+    z.literalArray([z.literal("key"), z.number(), z.boolean().optional()]),
+    z.literalArray([z.literal("key_up"), z.number()]),
+]);
 
 export class KeyEvent implements IEvent {
     public static TYPES = ["key", "key_up"];
@@ -38,21 +50,19 @@ export class KeyEvent implements IEvent {
         return this.isUp ? "key_up" : "key";
     }
     public get_args() {
-        return [this.key, this.isUp ? null : this.isHeld];
+        return [this.key, this.isUp ? undefined : this.isHeld];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "key" && (args[0] as string) != "key_up")
-        )
-            return null;
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, key, isHeld] = parseEventArgs(args, keyArgsSchema);
         let ev = new KeyEvent();
-        ev.key = args[1] as number;
-        ev.isUp = (args[0] as string) == "key_up";
-        ev.isHeld = ev.isUp ? false : (args[2] as boolean);
+        ev.key = key;
+        ev.isUp = name == "key_up";
+        ev.isHeld = ev.isUp ? false : (isHeld ?? false);
         return ev;
     }
 }
+
+const pasteArgsSchema = z.literalArray([z.literal("paste"), z.string()]);
 
 export class PasteEvent implements IEvent {
     public static TYPES = ["paste"];
@@ -63,14 +73,18 @@ export class PasteEvent implements IEvent {
     public get_args() {
         return [this.text as any];
     }
-    public static init(args: any[]): IEvent | null {
-        if (!(typeof args[0] === "string") || (args[0] as string) != "paste")
-            return null;
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, text] = parseEventArgs(args, pasteArgsSchema);
         let ev = new PasteEvent();
-        ev.text = args[1] as string;
+        ev.text = text;
         return ev;
     }
 }
+
+const timerArgsSchema = z.union([
+    z.literalArray([z.literal("timer"), z.number()]),
+    z.literalArray([z.literal("alarm"), z.number()]),
+]);
 
 export class TimerEvent implements IEvent {
     public static TYPES = ["timer", "alarm"];
@@ -82,24 +96,36 @@ export class TimerEvent implements IEvent {
     public get_args() {
         return [this.id];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "timer" && (args[0] as string) != "alarm")
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, id] = parseEventArgs(args, timerArgsSchema);
         let ev = new TimerEvent();
-        ev.id = args[1] as number;
-        ev.isAlarm = (args[0] as string) == "alarm";
+        ev.id = id;
+        ev.isAlarm = name == "alarm";
         return ev;
     }
 }
+
+const taskCompleteSuccessArgsSchema = z.literalArray([
+    z.literal("task_complete"),
+    z.number(),
+    z.literal(true),
+]);
+const taskCompleteFailureArgsSchema = z.literalArray([
+    z.literal("task_complete"),
+    z.number(),
+    z.literal(false),
+    z.string().optional(),
+]);
+const taskCompleteArgsSchema = z.union([
+    taskCompleteSuccessArgsSchema,
+    taskCompleteFailureArgsSchema,
+]);
 
 export class TaskCompleteEvent implements IEvent {
     public static TYPES = ["task_complete"];
     public id: number = 0;
     public success: boolean = false;
-    public error: string | null = null;
+    public error: string | undefined = undefined;
     public params: any[] = [];
     public get_name() {
         return "task_complete";
@@ -108,25 +134,26 @@ export class TaskCompleteEvent implements IEvent {
         if (this.success) return [this.id, this.success].concat(this.params);
         else return [this.id, this.success, this.error];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "task_complete"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, id, success, error] = parseEventArgs(
+            args,
+            taskCompleteArgsSchema,
+        );
         let ev = new TaskCompleteEvent();
-        ev.id = args[1] as number;
-        ev.success = args[2] as boolean;
+        ev.id = id;
+        ev.success = success;
         if (ev.success) {
-            ev.error = null;
+            ev.error = undefined;
             ev.params = args.slice(3);
         } else {
-            ev.error = args[3] as string;
+            ev.error = error ?? "";
             ev.params = [];
         }
         return ev;
     }
 }
+
+const redstoneArgsSchema = z.literalArray([z.literal("redstone")]);
 
 export class RedstoneEvent implements IEvent {
     public static TYPES = ["redstone"];
@@ -136,13 +163,14 @@ export class RedstoneEvent implements IEvent {
     public get_args() {
         return [];
     }
-    public static init(args: any[]): IEvent | null {
-        if (!(typeof args[0] === "string") || (args[0] as string) != "redstone")
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        parseEventArgs(args, redstoneArgsSchema);
         let ev = new RedstoneEvent();
         return ev;
     }
 }
+
+const terminateArgsSchema = z.literalArray([z.literal("terminate")]);
 
 export class TerminateEvent implements IEvent {
     public static TYPES = ["terminate"];
@@ -152,16 +180,17 @@ export class TerminateEvent implements IEvent {
     public get_args() {
         return [];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "terminate"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        parseEventArgs(args, terminateArgsSchema);
         let ev = new TerminateEvent();
         return ev;
     }
 }
+
+const diskArgsSchema = z.union([
+    z.literalArray([z.literal("disk"), z.string()]),
+    z.literalArray([z.literal("disk_eject"), z.string()]),
+]);
 
 export class DiskEvent implements IEvent {
     public static TYPES = ["disk", "disk_eject"];
@@ -173,19 +202,19 @@ export class DiskEvent implements IEvent {
     public get_args() {
         return [this.side];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "disk" &&
-                (args[0] as string) != "disk_eject")
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, side] = parseEventArgs(args, diskArgsSchema);
         let ev = new DiskEvent();
-        ev.side = args[1] as string;
-        ev.eject = (args[0] as string) == "disk_eject";
+        ev.side = side;
+        ev.eject = name == "disk_eject";
         return ev;
     }
 }
+
+const peripheralArgsSchema = z.union([
+    z.literalArray([z.literal("peripheral"), z.string()]),
+    z.literalArray([z.literal("peripheral_detach"), z.string()]),
+]);
 
 export class PeripheralEvent implements IEvent {
     public static TYPES = ["peripheral", "peripheral_detach"];
@@ -197,44 +226,54 @@ export class PeripheralEvent implements IEvent {
     public get_args() {
         return [this.side];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "peripheral" &&
-                (args[0] as string) != "peripheral_detach")
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, side] = parseEventArgs(args, peripheralArgsSchema);
         let ev = new PeripheralEvent();
-        ev.side = args[1] as string;
-        ev.detach = (args[0] as string) == "peripheral_detach";
+        ev.side = side;
+        ev.detach = name == "peripheral_detach";
         return ev;
     }
 }
+
+const rednetMessageArgsSchema = z.literalArray([
+    z.literal("rednet_message"),
+    z.number(),
+    z.unknown(),
+    z.string().optional(),
+]);
 
 export class RednetMessageEvent implements IEvent {
     public static TYPES = ["rednet_message"];
     public sender: number = 0;
     public message: any;
-    public protocol: string | null = null;
+    public protocol: string | undefined = undefined;
     public get_name() {
         return "rednet_message";
     }
     public get_args() {
         return [this.sender, this.message, this.protocol];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "rednet_message"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, sender, message, protocol] = parseEventArgs(
+            args,
+            rednetMessageArgsSchema,
+        );
         let ev = new RednetMessageEvent();
-        ev.sender = args[1] as number;
-        ev.message = args[2];
-        ev.protocol = args[3] as string;
+        ev.sender = sender;
+        ev.message = message;
+        ev.protocol = protocol;
         return ev;
     }
 }
+
+const modemMessageArgsSchema = z.literalArray([
+    z.literal("modem_message"),
+    z.string(),
+    z.number(),
+    z.number(),
+    z.unknown(),
+    z.number(),
+]);
 
 export class ModemMessageEvent implements IEvent {
     public static TYPES = ["modem_message"];
@@ -255,82 +294,158 @@ export class ModemMessageEvent implements IEvent {
             this.distance,
         ];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "modem_message"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, side, channel, replyChannel, message, distance] =
+            parseEventArgs(args, modemMessageArgsSchema);
         let ev = new ModemMessageEvent();
-        ev.side = args[1] as string;
-        ev.channel = args[2] as number;
-        ev.replyChannel = args[3] as number;
-        ev.message = args[4];
-        ev.distance = args[5] as number;
+        ev.side = side;
+        ev.channel = channel;
+        ev.replyChannel = replyChannel;
+        ev.message = message;
+        ev.distance = distance;
         return ev;
     }
 }
 
+const httpSuccessArgsSchema = z.literalArray([
+    z.literal("http_success"),
+    z.string(),
+    z.unknown(),
+]);
+const httpFailureArgsSchema = z.literalArray([
+    z.literal("http_failure"),
+    z.string(),
+    z.string().optional(),
+    z.unknown().optional(),
+]);
+const httpArgsSchema = z.union([httpSuccessArgsSchema, httpFailureArgsSchema]);
+
 export class HTTPEvent implements IEvent {
     public static TYPES = ["http_success", "http_failure"];
     public url: string = "";
-    public handle: HTTPResponse | null = null;
-    public error: string | null = null;
+    public handle: HTTPResponse | undefined = undefined;
+    public error: string | undefined = undefined;
     public get_name() {
-        return this.error == null ? "http_success" : "http_failure";
+        return this.error === undefined ? "http_success" : "http_failure";
     }
     public get_args() {
         return [
             this.url,
-            this.error == null ? this.handle : this.error,
-            this.error != null ? this.handle : null,
+            this.error === undefined ? this.handle : this.error,
+            this.error !== undefined ? this.handle : undefined,
         ];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "http_success" &&
-                (args[0] as string) != "http_failure")
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, url, value, handle] = parseEventArgs(args, httpArgsSchema);
         let ev = new HTTPEvent();
-        ev.url = args[1] as string;
-        if ((args[0] as string) == "http_success") {
-            ev.error = null;
-            ev.handle = args[2] as HTTPResponse;
+        ev.url = url;
+        if (name == "http_success") {
+            ev.error = undefined;
+            ev.handle = value as HTTPResponse;
         } else {
-            ev.error = args[2] as string;
-            if (ev.error == null) ev.error = "";
-            ev.handle = args[3] as HTTPResponse;
+            ev.error = (value as string | undefined) ?? "";
+            ev.handle = handle as HTTPResponse | undefined;
         }
         return ev;
     }
 }
 
-export class WebSocketEvent implements IEvent {
-    public static TYPES = ["websocket_success", "websocket_failure"];
-    public handle: WebSocket | null = null;
-    public error: string | null = null;
+const websocketMessageArgsSchema = z.literalArray([
+    z.literal("websocket_message"),
+    z.string(),
+    z.string(),
+    z.boolean(),
+]);
+
+export class WebSocketMessageEvent implements IEvent {
+    public static TYPES = ["websocket_message"];
+    public url: string = "";
+    public content: string = "";
+    public isBinary: boolean = false;
     public get_name() {
-        return this.error == null ? "websocket_success" : "websocket_failure";
+        return "websocket_message";
     }
     public get_args() {
-        return [this.handle == null ? this.error : this.handle];
+        return [this.url, this.content, this.isBinary];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "websocket_success" &&
-                (args[0] as string) != "websocket_failure")
-        )
-            throw "Invalid event type";
-        let ev = new WebSocketEvent();
-        if ((args[0] as string) == "websocket_success") {
-            ev.handle = args[1] as WebSocket;
-            ev.error = null;
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, url, content, isBinary] = parseEventArgs(
+            args,
+            websocketMessageArgsSchema,
+        );
+        let ev = new WebSocketMessageEvent();
+        ev.url = url;
+        ev.content = content;
+        ev.isBinary = isBinary;
+        return ev;
+    }
+}
+
+const websocketClosedArgsSchema = z.literalArray([
+    z.literal("websocket_closed"),
+    z.string(),
+    z.string().optional(),
+    z.number().optional(),
+]);
+
+export class WebSocketCloseEvent implements IEvent {
+    public static TYPES = ["websocket_closed"];
+    public url: string = "";
+    public reason: string | undefined = undefined;
+    public code: number | undefined = undefined;
+    public get_name() {
+        return "websocket_closed";
+    }
+    public get_args() {
+        return [this.url, this.reason, this.code];
+    }
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, url, reason, code] = parseEventArgs(
+            args,
+            websocketClosedArgsSchema,
+        );
+        let ev = new WebSocketCloseEvent();
+        ev.url = url;
+        ev.reason = reason;
+        ev.code = code;
+        return ev;
+    }
+}
+
+const websocketSuccessArgsSchema = z.literalArray([
+    z.literal("websocket_success"),
+    z.unknown(),
+]);
+const websocketFailureArgsSchema = z.literalArray([
+    z.literal("websocket_failure"),
+    z.string().optional(),
+]);
+const websocketArgsSchema = z.union([
+    websocketSuccessArgsSchema,
+    websocketFailureArgsSchema,
+]);
+
+export class WebSocketConnectEvent implements IEvent {
+    public static TYPES = ["websocket_success", "websocket_failure"];
+    public handle: WebSocket | undefined = undefined;
+    public error: string | undefined = undefined;
+    public get_name() {
+        return this.error === undefined
+            ? "websocket_success"
+            : "websocket_failure";
+    }
+    public get_args() {
+        return [this.handle === undefined ? this.error : this.handle];
+    }
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, value] = parseEventArgs(args, websocketArgsSchema);
+        let ev = new WebSocketConnectEvent();
+        if (name == "websocket_success") {
+            ev.handle = value as WebSocket;
+            ev.error = undefined;
         } else {
-            ev.error = args[1] as string;
-            ev.handle = null;
+            ev.error = (value as string | undefined) ?? "";
+            ev.handle = undefined;
         }
         return ev;
     }
@@ -345,6 +460,40 @@ export enum MouseEventType {
     Move,
 }
 
+const mouseArgsSchema = z.union([
+    z.literalArray([
+        z.literal("mouse_click"),
+        z.number(),
+        z.number(),
+        z.number(),
+    ]),
+    z.literalArray([z.literal("mouse_up"), z.number(), z.number(), z.number()]),
+    z.literalArray([
+        z.literal("mouse_scroll"),
+        z.number(),
+        z.number(),
+        z.number(),
+    ]),
+    z.literalArray([
+        z.literal("mouse_drag"),
+        z.number(),
+        z.number(),
+        z.number(),
+    ]),
+    z.literalArray([
+        z.literal("monitor_touch"),
+        z.string(),
+        z.number(),
+        z.number(),
+    ]),
+    z.literalArray([
+        z.literal("mouse_move"),
+        z.number(),
+        z.number(),
+        z.number(),
+    ]),
+]);
+
 export class MouseEvent implements IEvent {
     public static TYPES = [
         "mouse_click",
@@ -357,7 +506,7 @@ export class MouseEvent implements IEvent {
     public button: number = 0;
     public x: number = 0;
     public y: number = 0;
-    public side: string | null = null;
+    public side: string | undefined = undefined;
     public type: MouseEventType = MouseEventType.Click;
     public get_name() {
         return {
@@ -376,65 +525,70 @@ export class MouseEvent implements IEvent {
             this.y,
         ];
     }
-    public static init(args: any[]): IEvent | null {
-        if (!(typeof args[0] === "string")) return null;
+    public static init(args: unknown[]): IEvent | undefined {
+        const [type, first, x, y] = parseEventArgs(args, mouseArgsSchema);
         let ev = new MouseEvent();
-        const type = args[0] as string;
 
         if (type == "mouse_click") {
             ev.type = MouseEventType.Click;
-            ev.button = args[1] as number;
-            ev.side = null;
+            ev.button = first as number;
+            ev.side = undefined;
         } else if (type == "mouse_up") {
             ev.type = MouseEventType.Up;
-            ev.button = args[1] as number;
-            ev.side = null;
+            ev.button = first as number;
+            ev.side = undefined;
         } else if (type == "mouse_scroll") {
             ev.type = MouseEventType.Scroll;
-            ev.button = args[1] as number;
-            ev.side = null;
+            ev.button = first as number;
+            ev.side = undefined;
         } else if (type == "mouse_drag") {
             ev.type = MouseEventType.Drag;
-            ev.button = args[1] as number;
-            ev.side = null;
+            ev.button = first as number;
+            ev.side = undefined;
         } else if (type == "monitor_touch") {
             ev.type = MouseEventType.Touch;
             ev.button = 0;
-            ev.side = args[1] as string;
+            ev.side = first as string;
         } else if (type == "mouse_move") {
             ev.type = MouseEventType.Move;
-            ev.button = args[1] as number;
-            ev.side = null;
+            ev.button = first as number;
+            ev.side = undefined;
         } else throw "Invalid event type";
-        ev.x = args[2] as number;
-        ev.y = args[3] as number;
+        ev.x = x;
+        ev.y = y;
         return ev;
     }
 }
 
+const resizeArgsSchema = z.union([
+    z.literalArray([z.literal("term_resize")]),
+    z.literalArray([z.literal("monitor_resize"), z.string()]),
+]);
+
 export class ResizeEvent implements IEvent {
     public static TYPES = ["term_resize", "monitor_resize"];
-    public side: string | null = null;
+    public side: string | undefined = undefined;
     public get_name() {
-        return this.side == null ? "term_resize" : "monitor_resize";
+        return this.side === undefined ? "term_resize" : "monitor_resize";
     }
     public get_args() {
         return [this.side];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            ((args[0] as string) != "term_resize" &&
-                (args[0] as string) != "monitor_resize")
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [name, side] = parseEventArgs(args, resizeArgsSchema);
         let ev = new ResizeEvent();
-        if ((args[0] as string) == "monitor_resize")
-            ev.side = args[1] as string;
-        else ev.side = null;
+        if (name == "monitor_resize") {
+            ev.side = side;
+        } else {
+            ev.side = undefined;
+        }
         return ev;
     }
 }
+
+const turtleInventoryArgsSchema = z.literalArray([
+    z.literal("turtle_inventory"),
+]);
 
 export class TurtleInventoryEvent implements IEvent {
     public static TYPES = ["turtle_inventory"];
@@ -444,16 +598,17 @@ export class TurtleInventoryEvent implements IEvent {
     public get_args() {
         return [];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "turtle_inventory"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        parseEventArgs(args, turtleInventoryArgsSchema);
         let ev = new TurtleInventoryEvent();
         return ev;
     }
 }
+
+const speakerAudioEmptyArgsSchema = z.literalArray([
+    z.literal("speaker_audio_empty"),
+    z.string(),
+]);
 
 class SpeakerAudioEmptyEvent implements IEvent {
     public static TYPES = ["speaker_audio_empty"];
@@ -464,17 +619,17 @@ class SpeakerAudioEmptyEvent implements IEvent {
     public get_args() {
         return [this.side];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "speaker_audio_empty"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, side] = parseEventArgs(args, speakerAudioEmptyArgsSchema);
         let ev: SpeakerAudioEmptyEvent = new SpeakerAudioEmptyEvent();
-        ev.side = args[1] as string;
+        ev.side = side;
         return ev;
     }
 }
+
+const computerCommandArgsSchema = z.literalArray([
+    z.literal("computer_command"),
+]);
 
 class ComputerCommandEvent implements IEvent {
     public static TYPES = ["computer_command"];
@@ -485,14 +640,10 @@ class ComputerCommandEvent implements IEvent {
     public get_args() {
         return this.args;
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "computer_command"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        parseEventArgs(args, computerCommandArgsSchema);
         let ev: ComputerCommandEvent = new ComputerCommandEvent();
-        ev.args = args.slice(1);
+        ev.args = args.slice(1) as string[];
         return ev;
     }
 }
@@ -502,8 +653,9 @@ class Event implements IEvent {
     
     public get_name() {return "";}
     public get_args() {return [(: any)];}
-    public static init(args: any[]): IEvent | null {
-        if (!(typeof args[0] === "string") || (args[0] as string) != "") return null;
+    public static init(args: any[]): IEvent | undefined {
+        if (!(typeof args[0] === "string") || (args[0] as string) != "")
+            return undefined;
         let ev: Event;
 
         return ev;
@@ -512,14 +664,14 @@ class Event implements IEvent {
 */
 
 export class GenericEvent implements IEvent {
-    public args: any[] = [];
+    public args: unknown[] = [];
     public get_name() {
         return this.args[0] as string;
     }
     public get_args() {
         return this.args.slice(1);
     }
-    public static init(args: any[]): IEvent | null {
+    public static init(args: unknown[]): IEvent | undefined {
         let ev = new GenericEvent();
         ev.args = args;
         return ev;
@@ -533,8 +685,13 @@ export class LogLevel {
     public static readonly WARNING = new LogLevel(3, "WARNING");
     public static readonly ERROR = new LogLevel(4, "ERROR");
     public static readonly CRITICAL = new LogLevel(5, "CRITICAL");
-    
-    private static readonly LEVELS = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARNING, LogLevel.ERROR];
+
+    private static readonly LEVELS = [
+        LogLevel.DEBUG,
+        LogLevel.INFO,
+        LogLevel.WARNING,
+        LogLevel.ERROR,
+    ];
     public static fromLevel(level: number): LogLevel {
         if (level < 0 || level >= LogLevel.LEVELS.length) {
             throw new Error(`Invalid log level: ${level}`);
@@ -542,16 +699,27 @@ export class LogLevel {
         return LogLevel.LEVELS[level];
     }
 
-    private constructor(private readonly level: number, private readonly name: string) {}
+    private constructor(
+        private readonly level: number,
+        private readonly name: string,
+    ) {}
 
     public getLevel(): number {
         return this.level;
     }
-    
+
     public getName(): string {
         return this.name;
     }
 }
+
+const logArgsSchema = z.literalArray([
+    z.literal("log"),
+    z.number(),
+    z.string(),
+    z.unknown().optional(),
+    z.array(z.unknown()).optional(),
+]);
 
 export class LogEvent implements IEvent {
     public static TYPES = ["log"];
@@ -565,27 +733,32 @@ export class LogEvent implements IEvent {
     public get_args() {
         return [this.level.getLevel(), this.message, this.info, this.trace];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "log" ||
-            typeof args[1] !== "number" || 
-            typeof args[2] !== "string" ||
-            (args[3] !== undefined && typeof args[3] !== "object") ||
-            (args[4] !== undefined && typeof args[4] !== "object")
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, level, message, info, trace] = parseEventArgs(
+            args,
+            logArgsSchema,
+        );
         let ev = new LogEvent();
-        ev.level = LogLevel.fromLevel(args[1]);
-        ev.message = args[2];
-        ev.info = args[3] as Partial<debug.FunctionInfo>;
-        ev.trace = args[4] as Partial<debug.FunctionInfo>[];
+        ev.level = LogLevel.fromLevel(level);
+        ev.message = message;
+        ev.info = info as Partial<debug.FunctionInfo> | undefined;
+        ev.trace = trace as Partial<debug.FunctionInfo>[] | undefined;
         return ev;
     }
-    public static emit(level: LogLevel, message: string, info?: Partial<debug.FunctionInfo>, trace?: Partial<debug.FunctionInfo>[]) {
+    public static emit(
+        level: LogLevel,
+        message: string,
+        info?: Partial<debug.FunctionInfo>,
+        trace?: Partial<debug.FunctionInfo>[],
+    ) {
         os.queueEvent("log", level, message, info, trace);
     }
 }
+
+const metricArgsSchema = z.literalArray([
+    z.literal("metric"),
+    z.unknown().optional(),
+]);
 
 export class MetricEvent implements IEvent {
     public static TYPES = ["metric"];
@@ -596,20 +769,21 @@ export class MetricEvent implements IEvent {
     public get_args() {
         return [this.data];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "metric"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, data] = parseEventArgs(args, metricArgsSchema);
         let ev = new MetricEvent();
-        ev.data = (args[1] as MetricsData) ?? { resource_metrics: [] };
+        ev.data = (data as MetricsData | undefined) ?? { resource_metrics: [] };
         return ev;
     }
     public static emit(data: MetricsData) {
         os.queueEvent("metric", data);
     }
 }
+
+const metricRegisterArgsSchema = z.literalArray([
+    z.literal("metric_register"),
+    z.string(),
+]);
 
 export class MetricRegisterEvent implements IEvent {
     public static TYPES = ["metric_register"];
@@ -620,20 +794,21 @@ export class MetricRegisterEvent implements IEvent {
     public get_args() {
         return [this.publisher_id];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "metric_register"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, publisherId] = parseEventArgs(args, metricRegisterArgsSchema);
         let ev = new MetricRegisterEvent();
-        ev.publisher_id = args[1] as string;
+        ev.publisher_id = publisherId;
         return ev;
     }
     public static emit(publisherId: string) {
         os.queueEvent("metric_register", publisherId);
     }
 }
+
+const metricUnregisterArgsSchema = z.literalArray([
+    z.literal("metric_unregister"),
+    z.string(),
+]);
 
 export class MetricUnregisterEvent implements IEvent {
     public static TYPES = ["metric_unregister"];
@@ -644,20 +819,25 @@ export class MetricUnregisterEvent implements IEvent {
     public get_args() {
         return [this.publisher_id];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "metric_unregister"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, publisherId] = parseEventArgs(
+            args,
+            metricUnregisterArgsSchema,
+        );
         let ev = new MetricUnregisterEvent();
-        ev.publisher_id = args[1] as string;
+        ev.publisher_id = publisherId;
         return ev;
     }
     public static emit(publisherId: string) {
         os.queueEvent("metric_unregister", publisherId);
     }
 }
+
+const metricCollectArgsSchema = z.literalArray([
+    z.literal("metric_collect"),
+    z.number(),
+    z.number(),
+]);
 
 export class MetricCollectEvent implements IEvent {
     public static TYPES = ["metric_collect"];
@@ -669,21 +849,27 @@ export class MetricCollectEvent implements IEvent {
     public get_args() {
         return [this.request_id, this.collection_time_unix_nano];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "metric_collect"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, requestId, collectionTimeUnixNano] = parseEventArgs(
+            args,
+            metricCollectArgsSchema,
+        );
         let ev = new MetricCollectEvent();
-        ev.request_id = args[1] as number;
-        ev.collection_time_unix_nano = args[2] as number;
+        ev.request_id = requestId;
+        ev.collection_time_unix_nano = collectionTimeUnixNano;
         return ev;
     }
     public static emit(requestId: number, collectionTimeUnixNano: number) {
         os.queueEvent("metric_collect", requestId, collectionTimeUnixNano);
     }
 }
+
+const metricResponseArgsSchema = z.literalArray([
+    z.literal("metric_response"),
+    z.number(),
+    z.string(),
+    z.unknown().optional(),
+]);
 
 export class MetricResponseEvent implements IEvent {
     public static TYPES = ["metric_response"];
@@ -696,16 +882,16 @@ export class MetricResponseEvent implements IEvent {
     public get_args() {
         return [this.request_id, this.publisher_id, this.resource_metrics];
     }
-    public static init(args: any[]): IEvent | null {
-        if (
-            !(typeof args[0] === "string") ||
-            (args[0] as string) != "metric_response"
-        )
-            throw "Invalid event type";
+    public static init(args: unknown[]): IEvent | undefined {
+        const [, requestId, publisherId, resourceMetrics] = parseEventArgs(
+            args,
+            metricResponseArgsSchema,
+        );
         let ev = new MetricResponseEvent();
-        ev.request_id = args[1] as number;
-        ev.publisher_id = args[2] as string;
-        ev.resource_metrics = (args[3] as ResourceMetrics[]) ?? [];
+        ev.request_id = requestId;
+        ev.publisher_id = publisherId;
+        ev.resource_metrics =
+            (resourceMetrics as ResourceMetrics[] | undefined) ?? [];
         return ev;
     }
     public static emit(
@@ -713,12 +899,20 @@ export class MetricResponseEvent implements IEvent {
         publisherId: string,
         resourceMetrics: ResourceMetrics[],
     ) {
-        os.queueEvent("metric_response", requestId, publisherId, resourceMetrics);
+        os.queueEvent(
+            "metric_response",
+            requestId,
+            publisherId,
+            resourceMetrics,
+        );
     }
 }
 
 export interface MetricProvider {
-    (requestId: number, collectionTimeUnixNano: number): ResourceMetrics[] | null;
+    (
+        requestId: number,
+        collectionTimeUnixNano: number,
+    ): ResourceMetrics[] | undefined;
 }
 
 export interface MetricCollectorOptions {
@@ -748,9 +942,10 @@ export function runMetricCollector(options: MetricCollectorOptions) {
     const publisherIds: Record<string, true> = {};
     let requestId = 1;
     const intervalSeconds = math.max(0.05, options.interval_seconds);
-    const responseTimeout = options.response_timeout_seconds ?? intervalSeconds * 0.5;
+    const responseTimeout =
+        options.response_timeout_seconds ?? intervalSeconds * 0.5;
     let timerId = os.startTimer(intervalSeconds);
-    while (running) {
+    while (true) {
         const raw = pullEventRaw();
         if (!raw) continue;
         if (raw instanceof MetricRegisterEvent) {
@@ -783,7 +978,10 @@ export function runMetricCollector(options: MetricCollectorOptions) {
                     publisherIds[collectEvent.publisher_id] = true;
                 } else if (collectEvent instanceof MetricUnregisterEvent) {
                     delete publisherIds[collectEvent.publisher_id];
-                } else if (collectEvent instanceof TimerEvent && collectEvent.id === timeoutTimerId) {
+                } else if (
+                    collectEvent instanceof TimerEvent &&
+                    collectEvent.id === timeoutTimerId
+                ) {
                     break;
                 }
             }
@@ -801,106 +999,114 @@ export function runMetricCollector(options: MetricCollectorOptions) {
     }
 }
 
-let eventInitializers: Record<string, (args: any[]) => IEvent | null> = {}
+let eventInitializers: Record<string, (args: any[]) => IEvent | undefined> = {};
 
-CharEvent.TYPES.forEach(type => {
+CharEvent.TYPES.forEach((type) => {
     eventInitializers[type] = CharEvent.init;
 });
-KeyEvent.TYPES.forEach(type => {
+KeyEvent.TYPES.forEach((type) => {
     eventInitializers[type] = KeyEvent.init;
 });
-PasteEvent.TYPES.forEach(type => {
+PasteEvent.TYPES.forEach((type) => {
     eventInitializers[type] = PasteEvent.init;
 });
-TimerEvent.TYPES.forEach(type => {
+TimerEvent.TYPES.forEach((type) => {
     eventInitializers[type] = TimerEvent.init;
 });
-TaskCompleteEvent.TYPES.forEach(type => {
+TaskCompleteEvent.TYPES.forEach((type) => {
     eventInitializers[type] = TaskCompleteEvent.init;
 });
-RedstoneEvent.TYPES.forEach(type => {
+RedstoneEvent.TYPES.forEach((type) => {
     eventInitializers[type] = RedstoneEvent.init;
 });
-TerminateEvent.TYPES.forEach(type => {
+TerminateEvent.TYPES.forEach((type) => {
     eventInitializers[type] = TerminateEvent.init;
 });
-DiskEvent.TYPES.forEach(type => {
+DiskEvent.TYPES.forEach((type) => {
     eventInitializers[type] = DiskEvent.init;
 });
-PeripheralEvent.TYPES.forEach(type => {
+PeripheralEvent.TYPES.forEach((type) => {
     eventInitializers[type] = PeripheralEvent.init;
 });
-RednetMessageEvent.TYPES.forEach(type => {
+RednetMessageEvent.TYPES.forEach((type) => {
     eventInitializers[type] = RednetMessageEvent.init;
 });
-ModemMessageEvent.TYPES.forEach(type => {
+ModemMessageEvent.TYPES.forEach((type) => {
     eventInitializers[type] = ModemMessageEvent.init;
 });
-HTTPEvent.TYPES.forEach(type => {
+HTTPEvent.TYPES.forEach((type) => {
     eventInitializers[type] = HTTPEvent.init;
 });
-WebSocketEvent.TYPES.forEach(type => {
-    eventInitializers[type] = WebSocketEvent.init;
+WebSocketMessageEvent.TYPES.forEach((type) => {
+    eventInitializers[type] = WebSocketMessageEvent.init;
 });
-MouseEvent.TYPES.forEach(type => {
+WebSocketCloseEvent.TYPES.forEach((type) => {
+    eventInitializers[type] = WebSocketCloseEvent.init;
+});
+WebSocketConnectEvent.TYPES.forEach((type) => {
+    eventInitializers[type] = WebSocketConnectEvent.init;
+});
+MouseEvent.TYPES.forEach((type) => {
     eventInitializers[type] = MouseEvent.init;
 });
-ResizeEvent.TYPES.forEach(type => {
+ResizeEvent.TYPES.forEach((type) => {
     eventInitializers[type] = ResizeEvent.init;
 });
-TurtleInventoryEvent.TYPES.forEach(type => {
+TurtleInventoryEvent.TYPES.forEach((type) => {
     eventInitializers[type] = TurtleInventoryEvent.init;
 });
-SpeakerAudioEmptyEvent.TYPES.forEach(type => {
+SpeakerAudioEmptyEvent.TYPES.forEach((type) => {
     eventInitializers[type] = SpeakerAudioEmptyEvent.init;
 });
-ComputerCommandEvent.TYPES.forEach(type => {
+ComputerCommandEvent.TYPES.forEach((type) => {
     eventInitializers[type] = ComputerCommandEvent.init;
 });
-MetricEvent.TYPES.forEach(type => {
+MetricEvent.TYPES.forEach((type) => {
     eventInitializers[type] = MetricEvent.init;
 });
-MetricRegisterEvent.TYPES.forEach(type => {
+MetricRegisterEvent.TYPES.forEach((type) => {
     eventInitializers[type] = MetricRegisterEvent.init;
 });
-MetricUnregisterEvent.TYPES.forEach(type => {
+MetricUnregisterEvent.TYPES.forEach((type) => {
     eventInitializers[type] = MetricUnregisterEvent.init;
 });
-MetricCollectEvent.TYPES.forEach(type => {
+MetricCollectEvent.TYPES.forEach((type) => {
     eventInitializers[type] = MetricCollectEvent.init;
 });
-MetricResponseEvent.TYPES.forEach(type => {
+MetricResponseEvent.TYPES.forEach((type) => {
     eventInitializers[type] = MetricResponseEvent.init;
 });
 
-
 type Constructor<T extends {} = {}> = new (...args: any[]) => T;
-export function pullEventRaw(filter: string | null = null): IEvent | null {
+export function pullEventRaw(
+    filter: string | undefined = undefined,
+): IEvent | undefined {
     let args = table.pack(...coroutine.yield(filter));
     if (eventInitializers[args[0]]) {
         return eventInitializers[args[0]](args);
     }
     return GenericEvent.init(args);
 }
-export function pullEvent(filter: string | null = null): IEvent | null {
+export function pullEvent(
+    filter: string | undefined = undefined,
+): IEvent | undefined {
     let ev = pullEventRaw(filter);
     if (ev instanceof TerminateEvent) throw "Terminated";
     return ev;
 }
 export function pullEventRawAs<T extends IEvent>(
     type: Constructor<T>,
-    filter: string | null = null,
-): T | null {
+    filter: string | undefined = undefined,
+): T | undefined {
     let ev = pullEventRaw(filter);
     if (ev instanceof type) return ev as T;
-    else return null;
+    else return undefined;
 }
 export function pullEventAs<T extends IEvent>(
     type: Constructor<T>,
-    filter: string | null = null,
-): T | null {
+    filter: string | undefined = undefined,
+): T | undefined {
     let ev = pullEvent(filter);
     if (ev instanceof type) return ev as T;
-    else return null;
+    else return undefined;
 }
-

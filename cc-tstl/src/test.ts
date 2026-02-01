@@ -26,7 +26,7 @@ class HelloService {
         } else {
             const body = valid_response.readAll();
             if (body === undefined) {
-                throw error("Failed to read response body");
+                throw "Failed to read response body";
             }
             return body;
         }

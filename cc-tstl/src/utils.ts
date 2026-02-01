@@ -24,7 +24,7 @@ function requireMinVersion(minVersion: string): void {
         print("Using _HOST: " + version);
     }
     if (!version) {
-        error("Could not determine version of ComputerCraft");
+        throw "Could not determine version of ComputerCraft";
     } else {
         const versionParts = versionToParts(version);
         const minParts = versionToParts(minVersion);

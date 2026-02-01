@@ -81,8 +81,8 @@ func (r *Router[A]) Handle(ctx WSRequestContext, pathLength int, dec *msgpack.De
 
 	ctx.path += "/" + fmt.Sprint(path)
 
-	if pathLength < 2 {
-
+	if pathLength-1 < 2 {
+		slog.Info("reached route", "path", ctx.path)
 	}
 
 	r.mu.RLock()
@@ -92,7 +92,7 @@ func (r *Router[A]) Handle(ctx WSRequestContext, pathLength int, dec *msgpack.De
 		return ErrRouteNotFound
 	}
 
-	return route.Handle(ctx, pathLength, dec)
+	return route.Handle(ctx, pathLength-1, dec)
 }
 
 var testRouter = NewRouter[int]((*msgpack.Decoder).DecodeInt)

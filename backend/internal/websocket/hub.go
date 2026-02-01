@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -95,6 +96,7 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		if h.router != nil {
 			dec := msgpack.NewDecoder(bytes.NewReader(message))
 			arrayLength, err := dec.DecodeArrayLen()
+			slog.Info("message received", "message string", message, "message bytes", fmt.Sprintf("% X", message), "array length", arrayLength)
 			if err != nil {
 				slog.Error("failed to decode array length from websocket message")
 				continue

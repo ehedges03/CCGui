@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
@@ -46,6 +48,7 @@ func handlePing(data int, ctx WSRequestContext) error {
 	}
 	buf := makeMessage(MessagePong, data)
 	err := ctx.conn.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+	slog.Info("sent message", "message", fmt.Sprintf("% X", buf), "data", data)
 	return err
 }
 

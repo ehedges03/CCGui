@@ -5,13 +5,15 @@
         "lib": ["ESNext"],
         "moduleResolution": "node",
         "rootDir": "src",
-        "outDir": "dist",
+        // "outDir": "dist",
+        "outDir": "/home/ehedges/.local/share/PrismLauncher/instances/FTB StoneBlock 4/minecraft/saves/New World/computercraft/computer/0/",
         "strict": true,
         "types": ["@jackmacwindows/lua-types/cc-5.2", "@jackmacwindows/craftos-types", "@jackmacwindows/cc-types"]
     },
     "tstl": {
         "luaTarget": "CC-5.2",
         "luaLibImport": "inline",
+        // "noResolvePaths": ["**"],
         // "luaBundle": "main.lua",
         // "luaBundleEntry": "src/main.ts",
         "sourceMapTraceback": true,

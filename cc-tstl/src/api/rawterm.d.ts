@@ -8,7 +8,7 @@ export interface RawtermDelegate {
     /** Send a raw protocol message. */
     send(data: string): void;
     /** Receive a raw protocol message (optionally with timeout). */
-    receive(timeout?: number): string | undefined | null;
+    receive(timeout?: number): string | undefined;
     /** Close the underlying transport. */
     close?(): void;
 }

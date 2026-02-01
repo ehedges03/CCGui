@@ -58,7 +58,7 @@ export function unpack(data: string): unknown;
 
 export function unpacker(src: string): () => LuaMultiReturn<[number, unknown] | []>;
 export function unpacker(
-    src: () => string | undefined | null
+    src: () => string | undefined
 ): () => LuaMultiReturn<[true, unknown] | []>;
 
 export let sentinel: unknown;

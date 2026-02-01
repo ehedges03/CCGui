@@ -27,7 +27,7 @@ function requireMinVersion(minVersion: string): void {
     }    
 
     if (!version) {
-        error("Could not determine version of ComputerCraft");
+        throw "Could not determine version of ComputerCraft";
     } else {
         const versionParts = versionToParts(version);
         const minParts = versionToParts(minVersion);
@@ -38,7 +38,7 @@ function requireMinVersion(minVersion: string): void {
 function downloadText(url: string): string {
     const [response, errorMessage] = http.get(url);
     if (!response) {
-        error("Could not download from " + url + ": " + (errorMessage || "unknown error"));
+        throw "Could not download from " + url + ": " + (errorMessage || "unknown error");
     }
     const body = response.readAll();
     response.close();

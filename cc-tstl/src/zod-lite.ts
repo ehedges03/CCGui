@@ -1,7 +1,5 @@
 export type IssuePath = Array<string | number>;
 
-export const DEBUG_MODE = true;
-
 export interface Issue {
     path: IssuePath;
     message: string;
@@ -19,28 +17,32 @@ export type SafeParseReturn<T> = SafeParseSuccess<T> | SafeParseFailure;
 
 export interface Schema<T> {
     parse(input: unknown): T;
-    safeParse(input: unknown): SafeParseReturn<T>;
+    safeParse(input: unknown, ctx?: ParseContext): SafeParseReturn<T>;
+    default<D>(defaultValue: D): Schema<T | D>;
     optional(): Schema<T | undefined>;
-    nullable(): Schema<T | null>;
 }
 
-export type Infer<TSchema extends Schema<unknown>> = TSchema extends Schema<infer T> ? T : never;
+export type Infer<TSchema extends Schema<unknown>> =
+    TSchema extends Schema<infer T> ? T : never;
 
 type ParseContext = {
     path: IssuePath;
     issues: Issue[];
 };
 
-type Parser<T> = (input: unknown, ctx: ParseContext) => { ok: true; value: T } | { ok: false };
+type Parser<T> = (
+    input: unknown,
+    ctx: ParseContext,
+) => { ok: true; value: T } | { ok: false };
 
-const typeOf = (value: unknown): string => {
-    if (value === null) {
-        return "null";
-    }
-    return typeof value;
-};
+const typeOf = (value: unknown): string => typeof value;
 
-const addIssue = (ctx: ParseContext, message: string, expected?: string, received?: string): void => {
+const addIssue = (
+    ctx: ParseContext,
+    message: string,
+    expected?: string,
+    received?: string,
+): void => {
     ctx.issues.push({
         path: ctx.path.slice(),
         message,
@@ -49,7 +51,11 @@ const addIssue = (ctx: ParseContext, message: string, expected?: string, receive
     });
 };
 
-const withPath = <T>(ctx: ParseContext, segment: string | number, fn: () => T): T => {
+const withPath = <T>(
+    ctx: ParseContext,
+    segment: string | number,
+    fn: () => T,
+): T => {
     ctx.path.push(segment);
     const result = fn();
     ctx.path.pop();
@@ -57,8 +63,13 @@ const withPath = <T>(ctx: ParseContext, segment: string | number, fn: () => T): 
 };
 
 const makeSchema = <T>(parser: Parser<T>): Schema<T> => {
-    const safeParse = (input: unknown): SafeParseReturn<T> => {
-        const ctx: ParseContext = { path: [], issues: [] };
+    const safeParse = (
+        input: unknown,
+        ctx?: ParseContext,
+    ): SafeParseReturn<T> => {
+        if (ctx === undefined) {
+            ctx = { path: [], issues: [] };
+        }
         const result = parser(input, ctx);
         if (result.ok) {
             return { success: true, data: result.value };
@@ -72,9 +83,19 @@ const makeSchema = <T>(parser: Parser<T>): Schema<T> => {
             return result.data;
         }
         const firstIssue = result.error.issues[0];
-        const message = firstIssue !== undefined ? firstIssue.message : "Invalid value";
+        const message =
+            firstIssue !== undefined ? firstIssue.message : "Invalid value";
         error(message);
     };
+
+    const defaultFunc = <D>(defaultValue: D): Schema<T | D> =>
+        makeSchema<T | D>((input, ctx) => {
+            const parse = parser(input, ctx);
+            if (!parse.ok) {
+                return { ok: true, value: defaultValue };
+            }
+            return parse;
+        });
 
     const optional = (): Schema<T | undefined> =>
         makeSchema<T | undefined>((input, ctx) => {
@@ -84,15 +105,7 @@ const makeSchema = <T>(parser: Parser<T>): Schema<T> => {
             return parser(input, ctx);
         });
 
-    const nullable = (): Schema<T | null> =>
-        makeSchema<T | null>((input, ctx) => {
-            if (input === null) {
-                return { ok: true, value: null };
-            }
-            return parser(input, ctx);
-        });
-
-    return { parse, safeParse, optional, nullable };
+    return { parse, safeParse, default: defaultFunc, optional };
 };
 
 export type Shape = Record<string, Schema<unknown>>;
@@ -125,10 +138,15 @@ const booleanSchema = (): Schema<boolean> =>
         return { ok: true, value: input };
     });
 
-const literalSchema = <T extends string | number | boolean | null>(literal: T): Schema<T> =>
+const unknownSchema = (): Schema<unknown> =>
+    makeSchema<unknown>((input) => ({ ok: true, value: input }));
+
+const literalSchema = <T extends string | number | boolean>(
+    literal: T,
+): Schema<T> =>
     makeSchema<T>((input, ctx) => {
         if (input !== literal) {
-            addIssue(ctx, "Expected literal value", "literal", typeOf(input));
+            addIssue(ctx, "Expected literal value", String(literal), String(input));
             return { ok: false };
         }
         return { ok: true, value: literal };
@@ -143,7 +161,7 @@ const arraySchema = <T>(item: Schema<T>): Schema<T[]> =>
         const output: T[] = [];
         for (let i = 0; i < input.length; i++) {
             const value = input[i];
-            const itemResult = withPath(ctx, i, () => item.safeParse(value));
+            const itemResult = withPath(ctx, i, () => item.safeParse(value, ctx));
             if (!itemResult.success) {
                 return { ok: false };
             }
@@ -152,9 +170,37 @@ const arraySchema = <T>(item: Schema<T>): Schema<T[]> =>
         return { ok: true, value: output };
     });
 
+type InferLiteralArray<T extends Schema<unknown>[]> = {
+    [K in keyof T]: Infer<T[K]>;
+};
+
+const literalArraySchema = <const T extends Schema<unknown>[]>(
+    item: T,
+): Schema<InferLiteralArray<T>> =>
+    // const literalArraySchema = <const T extends Schema<any>[]>(item: T)=>
+    makeSchema<InferLiteralArray<T>>((input, ctx) => {
+        if (!Array.isArray(input)) {
+            addIssue(ctx, "Expected array", "array", typeOf(input));
+            return { ok: false };
+        }
+        const output: unknown[] = [];
+        for (let i = 0; i < item.length; i++) {
+            const value = input[i];
+            const schema = item[i];
+            const itemResult = withPath(ctx, i, () => schema.safeParse(value,ctx));
+            if (!itemResult.success) {
+                return { ok: false };
+            }
+            output[i] = itemResult.data;
+        }
+        return { ok: true, value: output as InferLiteralArray<T> };
+    });
+
 const objectSchema = <S extends Shape>(shape: S): Schema<InferShape<S>> =>
     makeSchema<InferShape<S>>((input, ctx) => {
-        if (typeof input !== "object" || input === null || Array.isArray(input)) {
+        if (
+            typeof input !== "object" || Array.isArray(input)
+        ) {
             addIssue(ctx, "Expected object", "object", typeOf(input));
             return { ok: false };
         }
@@ -162,7 +208,9 @@ const objectSchema = <S extends Shape>(shape: S): Schema<InferShape<S>> =>
         for (const key in shape) {
             const schema = shape[key];
             const value = (input as Record<string, unknown>)[key];
-            const itemResult = withPath(ctx, key, () => schema.safeParse(value));
+            const itemResult = withPath(ctx, key, () =>
+                schema.safeParse(value, ctx),
+            );
             if (!itemResult.success) {
                 return { ok: false };
             }
@@ -185,47 +233,17 @@ const unionSchema = <T extends Schema<unknown>[]>(
         return { ok: false };
     });
 
-const optionalSchema = <T>(schema: Schema<T>): Schema<T | undefined> => schema.optional();
-const nullableSchema = <T>(schema: Schema<T>): Schema<T | null> => schema.nullable();
-
-const _z = {
+const optionalSchema = <T>(schema: Schema<T>): Schema<T | undefined> =>
+    schema.optional();
+export const z = {
     string: stringSchema,
     number: numberSchema,
     boolean: booleanSchema,
+    unknown: unknownSchema,
     literal: literalSchema,
     array: arraySchema,
+    literalArray: literalArraySchema,
     object: objectSchema,
     union: unionSchema,
     optional: optionalSchema,
-    nullable: nullableSchema,
 };
-
-const noopSchema = <T>(): Schema<T> => {
-    const parse = (input: unknown): T => input as T;
-    const safeParse = (input: unknown): SafeParseReturn<T> => ({
-        success: true,
-        data: input as T,
-    });
-    return {
-        parse,
-        safeParse,
-        optional: () => noopSchema<T | undefined>(),
-        nullable: () => noopSchema<T | null>(),
-    };
-};
-
-const _zNoop = {
-    string: () => noopSchema<string>(),
-    number: () => noopSchema<number>(),
-    boolean: () => noopSchema<boolean>(),
-    literal: <T extends string | number | boolean | null>(literal: T): Schema<T> =>
-        noopSchema<T>(),
-    array: <T>(item: Schema<T>): Schema<T[]> => noopSchema<T[]>(),
-    object: <S extends Shape>(shape: S): Schema<InferShape<S>> => noopSchema<InferShape<S>>(),
-    union: <T extends Schema<unknown>[]>(options: T): Schema<Infer<T[number]>> =>
-        noopSchema<Infer<T[number]>>(),
-    optional: <T>(schema: Schema<T>): Schema<T | undefined> => schema.optional(),
-    nullable: <T>(schema: Schema<T>): Schema<T | null> => schema.nullable(),
-};
-
-export const z = DEBUG_MODE ? _z : _zNoop;
