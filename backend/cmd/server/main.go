@@ -46,7 +46,9 @@ func main() {
 	}
 	apiKeyRepo := repository.NewGormAPIKeyRepository(db)
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
+	baseRouter := websocket.NewBaseRouter()
 	wsHub := websocket.NewHub(apiKeyService)
+	wsHub.SetRouter(baseRouter)
 	deleteCh, deleteUnsub := apiKeyService.SubscribeDeletes()
 	defer deleteUnsub()
 	go func() {

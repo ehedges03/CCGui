@@ -1,12 +1,16 @@
 package websocket
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 type Hub struct {
@@ -16,6 +20,7 @@ type Hub struct {
 	mu        sync.RWMutex
 	validator APIKeyValidator
 	byKeyID   map[string]map[*websocket.Conn]struct{}
+	router    Route
 }
 
 type APIKeyValidator interface {
@@ -38,6 +43,19 @@ func NewHub(validator APIKeyValidator) *Hub {
 		validator: validator,
 		byKeyID:   make(map[string]map[*websocket.Conn]struct{}),
 	}
+}
+
+func (h *Hub) SetRouter(router Route) {
+	h.mu.Lock()
+	h.router = router
+	h.mu.Unlock()
+
+}
+
+type WSRequestContext struct {
+	context.Context
+	conn *websocket.Conn
+	path string
 }
 
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +91,29 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			h.mu.Unlock()
 			break
+		}
+		if h.router != nil {
+			dec := msgpack.NewDecoder(bytes.NewReader(message))
+			arrayLength, err := dec.DecodeArrayLen()
+			if err != nil {
+				slog.Error("failed to decode array length from websocket message")
+				continue
+			}
+			wsContext := WSRequestContext{
+				Context: r.Context(),
+				conn:    conn,
+				path:    "",
+			}
+			if err := h.router.Handle(wsContext, arrayLength, dec); err != nil {
+				if errors.Is(err, ErrRouteNotFound) || errors.Is(err, ErrInvalidMessage) {
+					slog.Warn("websocket route error", "err", err)
+				} else {
+					slog.Error("websocket handler error", "err", err)
+				}
+			}
+			continue
+		} else {
+			slog.Error("hub router not defined")
 		}
 		h.broadcast <- message
 	}
