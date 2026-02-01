@@ -11,9 +11,12 @@ import (
 
 	"ehedges.net/ccgui/backend/gen/auth/v1/authv1connect"
 	"ehedges.net/ccgui/backend/gen/hello/v1/hellov1connect"
-	"ehedges.net/ccgui/backend/internal/auth"
 	"ehedges.net/ccgui/backend/internal/controller"
+	"ehedges.net/ccgui/backend/internal/repository"
+	"ehedges.net/ccgui/backend/internal/service"
 	"ehedges.net/ccgui/backend/internal/websocket"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -28,9 +31,23 @@ func main() {
 	slog.SetDefault(logger)
 
 	mux := http.NewServeMux()
-	apiKeyManager := auth.NewManager()
-	wsHub := websocket.NewHub(apiKeyManager)
-	deleteCh, deleteUnsub := apiKeyManager.SubscribeDeletes()
+	if err := os.MkdirAll("data", 0o755); err != nil {
+		slog.Error("failed to create data directory", "err", err)
+		return
+	}
+	db, err := gorm.Open(sqlite.Open("data/ccgui.db"), &gorm.Config{})
+	if err != nil {
+		slog.Error("failed to open database", "err", err)
+		return
+	}
+	if err := repository.AutoMigrate(db); err != nil {
+		slog.Error("failed to migrate database", "err", err)
+		return
+	}
+	apiKeyRepo := repository.NewGormAPIKeyRepository(db)
+	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
+	wsHub := websocket.NewHub(apiKeyService)
+	deleteCh, deleteUnsub := apiKeyService.SubscribeDeletes()
 	defer deleteUnsub()
 	go func() {
 		for id := range deleteCh {
@@ -40,7 +57,7 @@ func main() {
 	mux.HandleFunc("/ws", wsHub.HandleWS)
 	path, connectHandler := hellov1connect.NewHelloServiceHandler(&controller.HelloController{})
 	mux.Handle(path, connectHandler)
-	authController := controller.NewAuthController(apiKeyManager)
+	authController := controller.NewAuthController(apiKeyService)
 	authHandlerPath, authHandler := authv1connect.NewAuthServiceHandler(authController)
 	mux.Handle(authHandlerPath, authHandler)
 

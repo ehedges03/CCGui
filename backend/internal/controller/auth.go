@@ -6,22 +6,16 @@ import (
 
 	"connectrpc.com/connect"
 	authv1 "ehedges.net/ccgui/backend/gen/auth/v1"
-	"ehedges.net/ccgui/backend/internal/auth"
+	"ehedges.net/ccgui/backend/internal/service"
 )
 
-type APIKeyManager interface {
-	Generate(name string) (*authv1.Key, error)
-	Delete(id string) (*authv1.KeySummary, error)
-	GetAll() ([]*authv1.KeySummary, error)
-}
-
 type AuthController struct {
-	manager APIKeyManager
+	service service.APIKeyService
 }
 
-func NewAuthController(manager APIKeyManager) *AuthController {
+func NewAuthController(service service.APIKeyService) *AuthController {
 	return &AuthController{
-		manager: manager,
+		service: service,
 	}
 }
 
@@ -31,7 +25,7 @@ func (c *AuthController) GenerateKey(ctx context.Context, req *connect.Request[a
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
 	}
 
-	key, err := c.manager.Generate(name)
+	key, err := c.service.Generate(ctx, name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -51,12 +45,12 @@ func (c *AuthController) DeleteKey(ctx context.Context, req *connect.Request[aut
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
 
-	summary, err := c.manager.Delete(id)
+	summary, err := c.service.Delete(ctx, id)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidKeyID) {
+		if errors.Is(err, service.ErrInvalidKeyID) {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		if errors.Is(err, auth.ErrKeyNotFound) {
+		if errors.Is(err, service.ErrKeyNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -71,7 +65,7 @@ func (c *AuthController) DeleteKey(ctx context.Context, req *connect.Request[aut
 }
 
 func (c *AuthController) GetAllKeys(ctx context.Context, req *connect.Request[authv1.GetAllKeysRequest]) (*connect.Response[authv1.GetAllKeysResponse], error) {
-	summaries, err := c.manager.GetAll()
+	summaries, err := c.service.GetAll(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
