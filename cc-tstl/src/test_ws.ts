@@ -24,18 +24,26 @@ class WebsocketService {
         }
         this.websocket = websocket;
         this.url = url;
-        parallel.waitForAll(
-            () => this.handleClose(),
-            () => this.handleMessage(),
-            () => {
-                let i = 0;
-                while (this.connected()) {
-                    this.ping(i++);
-                    os.sleep(0);
-                }
-            },
-        );
-
+        try {
+            parallel.waitForAll(
+                () => this.handleClose(),
+                () => this.handleMessage(),
+                () => {
+                    let i = 0;
+                    while (this.connected()) {
+                        this.ping(i++);
+                        os.sleep(0);
+                        if (i > 10) {
+                            os.queueEvent("terminate");
+                        }
+                    }
+                },
+            );
+        } catch (e) {
+            print("caught");
+            print(e);
+            os.sleep(5)
+        }
         return true;
     }
 
@@ -43,18 +51,19 @@ class WebsocketService {
         print("loopin close");
         while (this.websocket !== undefined) {
             print("head close");
-            const websocketClosedEvent = pullEventAs(
-                WebSocketCloseEvent,
-                "websocket_closed",
+            const {match, event} = pullEventAs(
+                WebSocketCloseEvent
             );
-            if (websocketClosedEvent === undefined) continue;
-            if (websocketClosedEvent.url === this.url) {
+            print("event", event);
+            if (!match) continue;
+            if (event.url === this.url) {
+                this.websocket.close();
                 this.websocket = undefined;
                 this.url = undefined;
                 print(
                     "websocket closed",
-                    websocketClosedEvent.reason,
-                    websocketClosedEvent.code,
+                    event.reason,
+                    event.code,
                 );
             }
         }
@@ -65,16 +74,16 @@ class WebsocketService {
         print("loopin message");
         while (this.websocket !== undefined) {
             print("head message");
-            const websocketMessageEvent = pullEventAs(
+            const {match, event} = pullEventAs(
                 WebSocketMessageEvent,
                 "websocket_message",
             );
-            if (websocketMessageEvent === undefined) continue;
-            if (websocketMessageEvent.url === this.url) {
-                if (!websocketMessageEvent.isBinary) {
+            if (!match) continue;
+            if (event.url === this.url) {
+                if (!event.isBinary) {
                     throw "message should be binary";
                 }
-                const data = unpack(websocketMessageEvent.content);
+                const data = unpack(event.content);
                 print(textutils.serialiseJSON(data));
             }
         }

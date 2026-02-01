@@ -17,6 +17,22 @@ export interface IEvent {
     get_args(): any[];
 }
 
+class BaseEvent {
+    static TYPES: string[] = [];
+    static init(args: any[]): any { return new this(); }
+}
+
+let eventInitializers: Record<string, (args: unknown[]) => IEvent | undefined> = {};
+function addEventInit<T extends typeof BaseEvent>(eventClass: T): void {
+    eventClass.TYPES.forEach((type) => {
+        if (eventInitializers[type] !== undefined) {
+            throw "event of type " + type + " has already been defined"
+        }
+        eventInitializers[type] = eventClass.init;
+    })
+}
+
+
 const charArgsSchema = z.literalArray([z.literal("char"), z.string()]);
 
 export class CharEvent implements IEvent {
@@ -35,6 +51,7 @@ export class CharEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(CharEvent);
 
 const keyArgsSchema = z.union([
     z.literalArray([z.literal("key"), z.number(), z.boolean().optional()]),
@@ -61,6 +78,7 @@ export class KeyEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(KeyEvent);
 
 const pasteArgsSchema = z.literalArray([z.literal("paste"), z.string()]);
 
@@ -80,6 +98,7 @@ export class PasteEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(PasteEvent);
 
 const timerArgsSchema = z.union([
     z.literalArray([z.literal("timer"), z.number()]),
@@ -104,6 +123,7 @@ export class TimerEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(TimerEvent);
 
 const taskCompleteSuccessArgsSchema = z.literalArray([
     z.literal("task_complete"),
@@ -152,6 +172,7 @@ export class TaskCompleteEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(TaskCompleteEvent);
 
 const redstoneArgsSchema = z.literalArray([z.literal("redstone")]);
 
@@ -169,6 +190,7 @@ export class RedstoneEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(RedstoneEvent);
 
 const terminateArgsSchema = z.literalArray([z.literal("terminate")]);
 
@@ -186,6 +208,7 @@ export class TerminateEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(TerminateEvent);
 
 const diskArgsSchema = z.union([
     z.literalArray([z.literal("disk"), z.string()]),
@@ -210,6 +233,7 @@ export class DiskEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(DiskEvent);
 
 const peripheralArgsSchema = z.union([
     z.literalArray([z.literal("peripheral"), z.string()]),
@@ -234,6 +258,7 @@ export class PeripheralEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(PeripheralEvent);
 
 const rednetMessageArgsSchema = z.literalArray([
     z.literal("rednet_message"),
@@ -265,6 +290,7 @@ export class RednetMessageEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(RednetMessageEvent);
 
 const modemMessageArgsSchema = z.literalArray([
     z.literal("modem_message"),
@@ -306,6 +332,7 @@ export class ModemMessageEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(ModemMessageEvent);
 
 const httpSuccessArgsSchema = z.literalArray([
     z.literal("http_success"),
@@ -349,6 +376,7 @@ export class HTTPEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(HTTPEvent);
 
 const websocketMessageArgsSchema = z.literalArray([
     z.literal("websocket_message"),
@@ -380,6 +408,7 @@ export class WebSocketMessageEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(WebSocketMessageEvent);
 
 const websocketClosedArgsSchema = z.literalArray([
     z.literal("websocket_closed"),
@@ -411,6 +440,7 @@ export class WebSocketCloseEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(WebSocketCloseEvent);
 
 const websocketSuccessArgsSchema = z.literalArray([
     z.literal("websocket_success"),
@@ -450,6 +480,7 @@ export class WebSocketConnectEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(WebSocketConnectEvent);
 
 export enum MouseEventType {
     Click,
@@ -559,6 +590,7 @@ export class MouseEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(MouseEvent);
 
 const resizeArgsSchema = z.union([
     z.literalArray([z.literal("term_resize")]),
@@ -585,6 +617,7 @@ export class ResizeEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(ResizeEvent);
 
 const turtleInventoryArgsSchema = z.literalArray([
     z.literal("turtle_inventory"),
@@ -604,6 +637,7 @@ export class TurtleInventoryEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(TurtleInventoryEvent);
 
 const speakerAudioEmptyArgsSchema = z.literalArray([
     z.literal("speaker_audio_empty"),
@@ -626,6 +660,7 @@ class SpeakerAudioEmptyEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(SpeakerAudioEmptyEvent);
 
 const computerCommandArgsSchema = z.literalArray([
     z.literal("computer_command"),
@@ -647,6 +682,7 @@ class ComputerCommandEvent implements IEvent {
         return ev;
     }
 }
+addEventInit(ComputerCommandEvent);
 
 /*
 class Event implements IEvent {
@@ -671,7 +707,7 @@ export class GenericEvent implements IEvent {
     public get_args() {
         return this.args.slice(1);
     }
-    public static init(args: unknown[]): IEvent | undefined {
+    public static init(args: unknown[]): IEvent {
         let ev = new GenericEvent();
         ev.args = args;
         return ev;
@@ -754,6 +790,7 @@ export class LogEvent implements IEvent {
         os.queueEvent("log", level, message, info, trace);
     }
 }
+addEventInit(LogEvent);
 
 const metricArgsSchema = z.literalArray([
     z.literal("metric"),
@@ -779,6 +816,7 @@ export class MetricEvent implements IEvent {
         os.queueEvent("metric", data);
     }
 }
+addEventInit(MetricEvent);
 
 const metricRegisterArgsSchema = z.literalArray([
     z.literal("metric_register"),
@@ -804,6 +842,7 @@ export class MetricRegisterEvent implements IEvent {
         os.queueEvent("metric_register", publisherId);
     }
 }
+addEventInit(MetricRegisterEvent);
 
 const metricUnregisterArgsSchema = z.literalArray([
     z.literal("metric_unregister"),
@@ -832,6 +871,7 @@ export class MetricUnregisterEvent implements IEvent {
         os.queueEvent("metric_unregister", publisherId);
     }
 }
+addEventInit(MetricUnregisterEvent);
 
 const metricCollectArgsSchema = z.literalArray([
     z.literal("metric_collect"),
@@ -863,6 +903,7 @@ export class MetricCollectEvent implements IEvent {
         os.queueEvent("metric_collect", requestId, collectionTimeUnixNano);
     }
 }
+addEventInit(MetricCollectEvent);
 
 const metricResponseArgsSchema = z.literalArray([
     z.literal("metric_response"),
@@ -907,6 +948,7 @@ export class MetricResponseEvent implements IEvent {
         );
     }
 }
+addEventInit(MetricResponseEvent);
 
 export interface MetricProvider {
     (
@@ -927,13 +969,18 @@ export function runMetricProvider(
 ) {
     MetricRegisterEvent.emit(publisherId);
     while (true) {
-        const ev = pullEventAs(MetricCollectEvent, "metric_collect");
-        if (!ev) continue;
-        const response = provider(ev.request_id, ev.collection_time_unix_nano);
+        const { match, event } = pullEventAs(
+            MetricCollectEvent,
+        );
+        if (!match) continue;
+        const response = provider(
+            event.request_id,
+            event.collection_time_unix_nano,
+        );
         if (response && response.length > 0) {
-            MetricResponseEvent.emit(ev.request_id, publisherId, response);
+            MetricResponseEvent.emit(event.request_id, publisherId, response);
         } else {
-            MetricResponseEvent.emit(ev.request_id, publisherId, []);
+            MetricResponseEvent.emit(event.request_id, publisherId, []);
         }
     }
 }
@@ -999,114 +1046,51 @@ export function runMetricCollector(options: MetricCollectorOptions) {
     }
 }
 
-let eventInitializers: Record<string, (args: any[]) => IEvent | undefined> = {};
-
-CharEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = CharEvent.init;
-});
-KeyEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = KeyEvent.init;
-});
-PasteEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = PasteEvent.init;
-});
-TimerEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = TimerEvent.init;
-});
-TaskCompleteEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = TaskCompleteEvent.init;
-});
-RedstoneEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = RedstoneEvent.init;
-});
-TerminateEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = TerminateEvent.init;
-});
-DiskEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = DiskEvent.init;
-});
-PeripheralEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = PeripheralEvent.init;
-});
-RednetMessageEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = RednetMessageEvent.init;
-});
-ModemMessageEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = ModemMessageEvent.init;
-});
-HTTPEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = HTTPEvent.init;
-});
-WebSocketMessageEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = WebSocketMessageEvent.init;
-});
-WebSocketCloseEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = WebSocketCloseEvent.init;
-});
-WebSocketConnectEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = WebSocketConnectEvent.init;
-});
-MouseEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = MouseEvent.init;
-});
-ResizeEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = ResizeEvent.init;
-});
-TurtleInventoryEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = TurtleInventoryEvent.init;
-});
-SpeakerAudioEmptyEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = SpeakerAudioEmptyEvent.init;
-});
-ComputerCommandEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = ComputerCommandEvent.init;
-});
-MetricEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = MetricEvent.init;
-});
-MetricRegisterEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = MetricRegisterEvent.init;
-});
-MetricUnregisterEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = MetricUnregisterEvent.init;
-});
-MetricCollectEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = MetricCollectEvent.init;
-});
-MetricResponseEvent.TYPES.forEach((type) => {
-    eventInitializers[type] = MetricResponseEvent.init;
-});
-
-type Constructor<T extends {} = {}> = new (...args: any[]) => T;
 export function pullEventRaw(
     filter: string | undefined = undefined,
-): IEvent | undefined {
+): IEvent {
     let args = table.pack(...coroutine.yield(filter));
-    if (eventInitializers[args[0]]) {
-        return eventInitializers[args[0]](args);
+    if (eventInitializers[args[0]] !== undefined) {
+        const event = eventInitializers[args[0]](args);
+        if (event === undefined) {
+            throw "Unexpected failure to parse event";
+        }
+        return event;
     }
     return GenericEvent.init(args);
 }
-export function pullEvent(
-    filter: string | undefined = undefined,
-): IEvent | undefined {
-    let ev = pullEventRaw(filter);
-    if (ev instanceof TerminateEvent) throw "Terminated";
+
+export function pullMultipleEventRaw(
+    filters: string[]
+): IEvent {
+    let ev: IEvent | undefined = undefined;
+    do {
+        ev = pullEventRaw();
+        if (ev instanceof TerminateEvent) {
+            continue;
+        }
+        if (filters.includes(ev.get_name())) {
+            continue;
+        }
+        ev = undefined;
+    } while (ev === undefined)
     return ev;
 }
-export function pullEventRawAs<T extends IEvent>(
-    type: Constructor<T>,
-    filter: string | undefined = undefined,
-): T | undefined {
-    let ev = pullEventRaw(filter);
-    if (ev instanceof type) return ev as T;
-    else return undefined;
-}
-export function pullEventAs<T extends IEvent>(
-    type: Constructor<T>,
-    filter: string | undefined = undefined,
-): T | undefined {
-    let ev = pullEvent(filter);
-    if (ev instanceof type) return ev as T;
-    else return undefined;
+
+type ValidEvent<T> =
+    | { match: true; event: T }
+    | { match: false; event: IEvent };
+export function pullEventAs<T extends typeof BaseEvent>(
+    type: T,
+    filter?: string,
+): ValidEvent<InstanceType<T>> {
+    const filters = filter !== undefined ? [filter] : type.TYPES;
+    let ev: IEvent;
+    if (filters.length <= 1) {
+        ev = pullEventRaw(filters[0]);
+    } else {
+        ev = pullMultipleEventRaw(filters);
+    }
+    if (ev instanceof type) return { match: true, event: ev as InstanceType<T> };
+    return { match: false, event: ev };
 }

@@ -55,10 +55,10 @@ class WebsocketService {
     
     private handleDisconnect() {
         while (this.websocket !== undefined) {
-            const event = pullEventAs(WebSocketConnectEvent, "websocket_closed")
-            if (event === undefined) continue;
+            const {match, event} = pullEventAs(WebSocketConnectEvent)
+            if (!match) continue;
 
-            event.get_name
+            // event.get_name
         }
     }
 }
