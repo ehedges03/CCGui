@@ -1,6 +1,7 @@
-import type { RawtermDelegate, RawtermRenderTarget, RawtermServerWindow } from "./api/rawterm";
+import { Logger } from "./lib/log";
+import type { RawtermDelegate, RawtermRenderTarget, RawtermServerWindow } from "./lib/rawterm";
 
-type RawtermModule = typeof import("./api/rawterm");
+type RawtermModule = typeof import("./lib/rawterm");
 
 declare const _CC_VERSION: string | undefined;
 declare const _HOST: string | undefined;
@@ -10,6 +11,7 @@ const MIN_CC_VERSION = "1.85.0";
 const REMOTE_WS_BASE_URL = "wss://remote.craftos-pc.cc/";
 const REMOTE_HTTP_BASE_URL = "https://remote.craftos-pc.cc/";
 const RAWTERM_EXPECTED_SIZE = 31339;
+const logger = new Logger("Server");
 
 function versionToParts(version: string): [number, number, number] {
     const parts = version.split(".");
@@ -52,7 +54,7 @@ function ensureStringPackPolyfill(): void {
     const stringLib = (globalThis as any).string as { pack?: (...args: unknown[]) => string };
     if (stringLib?.pack) return;
     if (!fs.exists("string_pack.lua")) {
-        print("Downloading string.pack polyfill...");
+        logger.info("Downloading string.pack polyfill...");
         const source = downloadText(REMOTE_HTTP_BASE_URL + "string_pack.lua");
         const [handle, openError] = fs.open("string_pack.lua", "w");
         if (!handle) {
@@ -70,7 +72,7 @@ function ensureStringPackPolyfill(): void {
 function loadRawtermModule(): RawtermModule {
     let rawtermModule: RawtermModule | undefined;
     if (!fs.exists("rawterm.lua") || fs.getSize("rawterm.lua") !== RAWTERM_EXPECTED_SIZE) {
-        print("Downloading rawterm API...");
+        logger.info("Downloading rawterm API...");
         const source = downloadText(REMOTE_HTTP_BASE_URL + "rawterm.lua");
         if (fs.getFreeSpace("/") >= source.length + 4096) {
             const [handle, openError] = fs.open("rawterm.lua", "w");
@@ -152,7 +154,7 @@ const args = table.pack(...(arg || []));
 const serverId = args[1] as string;
 const programName = args[2] as string | undefined;
 
-print("Connecting to " + REMOTE_WS_BASE_URL + "...");
+logger.info("Connecting to " + REMOTE_WS_BASE_URL + "...");
 const [baseDelegate, connectError] = rawterm.wsDelegate(REMOTE_WS_BASE_URL + serverId);
 if (!baseDelegate) {
     error("Could not connect to server: " + connectError);

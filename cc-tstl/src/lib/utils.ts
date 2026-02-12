@@ -1,6 +1,9 @@
+import { Logger } from "./log";
+
 declare const _CC_VERSION: string | undefined;
 
 const MIN_CC_VERSION = "1.85.0";
+const logger = new Logger("Utils");
 
 function versionToParts(version: string): [number, number, number] {
     const parts = version.split(".");
@@ -15,13 +18,13 @@ function requireMinVersion(minVersion: string): void {
     let version: string | undefined;
     if (_CC_VERSION) {
         version = _CC_VERSION;
-        print("Using _CC_VERSION: " + version);
+        logger.debug("Using _CC_VERSION: " + version);
     } else if (!_HOST) {
         version = string.gsub(os.version(), "CraftOS ", "")[0];
-        print("Using os.version(): " + version);
+        logger.debug("Using os.version(): " + version);
     } else {
         version = string.match(_HOST, "ComputerCraft ([0-9%.]+)")[0];
-        print("Using _HOST: " + version);
+        logger.debug("Using _HOST: " + version);
     }
     if (!version) {
         throw "Could not determine version of ComputerCraft";
@@ -34,7 +37,7 @@ function requireMinVersion(minVersion: string): void {
                 versionParts[2] >= minParts[2],
             "This program requires ComputerCraft " + minVersion + " or later.",
         );
-        print(
+        logger.info(
             "Version is " +
                 version +
                 " which is greater than or equal to " +

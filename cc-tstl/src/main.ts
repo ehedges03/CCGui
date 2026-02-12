@@ -1,18 +1,14 @@
-import * as event from "./api/event";
+import { Application } from "./Application";
+import { WebsocketConnection } from "./services/WebsocketConnection";
+import { Events } from "./system/event";
+import { Thread } from "./system/threads";
 
-export let running = true;
+function startup() {
+    const wsService = new WebsocketConnection();
+    const application = new Application(wsService);
+    application.start();
+    Thread.newThread(application.start);
+}
 
-// Put your code here
-const left = peripheral.wrap("left") as CommandPeripheral;
-left.setCommand("kill @e");
-left.runCommand();
-
-event.runMetricCollector({
-    interval_seconds: 1,
-    response_timeout_seconds: 1,
-    on_flush: (data) => {
-        print(textutils.serialiseJSON(data));
-    },
-});
-
-("Hello, world!");
+Thread.newThread(startup);
+Thread.run();

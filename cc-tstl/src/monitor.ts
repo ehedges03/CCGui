@@ -1,9 +1,11 @@
-import { base64decode, base64encode, verifyVersion } from "./utils";
-import { pack, unpack } from "./api/MessagePack";
-import { Infer, z } from "./zod-lite";
-import { pullEventAs, WebSocketConnectEvent } from "./api/event";
+import { Logger } from "./lib/log";
+import { base64decode, base64encode, verifyVersion } from "./lib/utils";
+import { pack, unpack } from "./lib/MessagePack";
+import { Infer, z } from "./lib/zod-lite";
+import { Events } from "./system/event";
 
 const REMOTE_BASE_URL = "http://localhost:8080";
+const logger = new Logger("MonitorTest");
 
 verifyVersion();
 
@@ -22,8 +24,8 @@ const testObjectSchema = z.object({
 const packedObject = pack(testObject);
 const unpackedObject = unpack(packedObject);
 
-print(textutils.serialiseJSON(packedObject));
-print(textutils.serialiseJSON(unpackedObject));
+logger.debug(textutils.serialiseJSON(packedObject));
+logger.debug(textutils.serialiseJSON(unpackedObject));
 
 const parsedObject = testObjectSchema.parse(unpackedObject);
 
@@ -33,7 +35,7 @@ const failParse = testObjectSchema.safeParse({
     city: "New York",
 });
 
-print(textutils.serialiseJSON(failParse));
+logger.debug(textutils.serialiseJSON(failParse));
 
 assert(parsedObject.name === testObject.name && parsedObject.age === testObject.age && parsedObject.city === testObject.city, "Unpacked object does not match test object");
 
@@ -45,7 +47,7 @@ class WebsocketService {
         const headers = new LuaMap<string, string>()
         headers.set("Authorization", `Bearer ${apiKey}`)
         const [websocket, error] = http.websocket(url, headers)
-        print(error)
+        logger.error(error)
         if (websocket === false) {
             return false;
         }
@@ -55,8 +57,8 @@ class WebsocketService {
     
     private handleDisconnect() {
         while (this.websocket !== undefined) {
-            const {match, event} = pullEventAs(WebSocketConnectEvent)
-            if (!match) continue;
+            // const {match, event} = Events.pullEventAs(Events.WebSocketConnect)
+            // if (!match) continue;
 
             // event.get_name
         }

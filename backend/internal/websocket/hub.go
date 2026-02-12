@@ -60,6 +60,7 @@ type WSRequestContext struct {
 }
 
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
+	slog.Info("websocket connection request")
 	if h.validator != nil && !h.isAuthorized(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return

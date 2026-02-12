@@ -6,7 +6,7 @@
   "main": "main.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tstl && rsync -a --include '*/' --include '*.lua' --exclude '*' src/ dist/"
+    "build": "node scripts/clean-outdir.mjs && tstl"
   },
   "devDependencies": {
     "typescript": "^5.1.0",

@@ -1,13 +1,17 @@
-import { verifyVersion } from "./utils";
+import { Logger } from "../lib/log";
+import { verifyVersion } from "../lib/utils";
 
 const REMOTE_BASE_URL = "http://localhost:8080";
+const logger = new Logger("TestHello");
 
 verifyVersion();
 
 class HelloService {
     public greet(name: string): string {
         
-        print(`Making post to ${REMOTE_BASE_URL}/hello.v1.HelloService/Greet with body ${textutils.serialiseJSON({ name })}`);
+        logger.info(
+            `Making post to ${REMOTE_BASE_URL}/hello.v1.HelloService/Greet with body ${textutils.serialiseJSON({ name })}`,
+        );
         const headers = new LuaMap<string, string>();
         headers.set("Content-Type", "application/json");
 
@@ -18,9 +22,9 @@ class HelloService {
         );
         if (valid_response === undefined) {
             if (response !== undefined) {
-                print(response.getResponseCode());
-                print(response.getResponseHeaders());
-                print(response.readAll());
+                logger.debug(response.getResponseCode());
+                logger.debug(textutils.serialiseJSON(response.getResponseHeaders()));
+                logger.debug(response.readAll());
             }
             throw error("Failed to greet: " + error_message);
         } else {
@@ -33,7 +37,7 @@ class HelloService {
     }
 }
 
-print("Making request to greet...");
+logger.info("Making request to greet...");
 const helloService = new HelloService();
 const response = helloService.greet("World");
-print(response);
+logger.info(response);

@@ -1,17 +1,19 @@
-import { base64decode, base64encode, verifyVersion } from "./utils";
-import { pack, unpack } from "./api/MessagePack";
-import { Infer, z } from "./zod-lite";
+import { Logger } from "../lib/log";
+import { base64decode, base64encode, verifyVersion } from "../lib/utils";
+import { pack, unpack } from "../lib/MessagePack";
+import { Infer, z } from "../lib/zod-lite";
 
 verifyVersion();
+const logger = new Logger("TestUtils");
 
 const testString = "Hello, world!";
 
 const encodedString = base64encode(testString);
 const decodedString = base64decode(encodedString);
 
-print(testString);
-print(encodedString);
-print(decodedString);
+logger.debug(testString);
+logger.debug(encodedString);
+logger.debug(decodedString);
 
 assert(decodedString === testString, "Decoded string does not match test string");
 
@@ -30,8 +32,8 @@ const testObjectSchema = z.object({
 const packedObject = pack(testObject);
 const unpackedObject = unpack(packedObject);
 
-print(textutils.serialiseJSON(packedObject));
-print(textutils.serialiseJSON(unpackedObject));
+logger.debug(textutils.serialiseJSON(packedObject));
+logger.debug(textutils.serialiseJSON(unpackedObject));
 
 const parsedObject = testObjectSchema.parse(unpackedObject);
 
@@ -47,4 +49,4 @@ assert(parsedObject.name === testObject.name && parsedObject.age === testObject.
 
 const websocketClosedArgsSchema = z.literalArray([z.literal("websocket_closed"), z.string(), z.string().default(undefined), z.number().default(undefined)])
 let fail = websocketClosedArgsSchema.safeParse(["websocket_closed", "url"])
-print(textutils.serialiseJSON(fail))
+logger.debug(textutils.serialiseJSON(fail))
