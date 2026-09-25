@@ -2,11 +2,14 @@ import { pack, unpack } from "../lib/MessagePack";
 import { Logger } from "../lib/log";
 import { base64encode } from "../lib/utils";
 import { Events } from "../system/event";
-import { Thread } from "../system/threads";
+import { Threads } from "../system/threads";
 
 const logger = new Logger("WebsocketConnection");
 
 type Listener = (message: any) => void;
+
+// Seconds between pings
+const PING_RATE = 30;
 
 enum BASE_ROUTES {
     PING = 0,
@@ -14,48 +17,58 @@ enum BASE_ROUTES {
 }
 
 export class WebsocketConnection {
-    private static readonly RETRY_RATE = 10000;
+    private static readonly RETRY_RATE = 10;
     private running = true;
     private url: string | undefined;
     private apiKey: string | undefined;
 
     private websocket: WebSocket | undefined;
     private lastPingPongTime: number = 0;
-    
+
     public setUrl(url: string) {
         this.url = url;
     }
-    
+
     public setCredentials(apiKey: string) {
         this.apiKey = apiKey;
     }
-    
+
     public start() {
         this.running = true;
-        Thread.newThread(() => {
-            while (this.running) {
-                Thread.sleep(30)
-                this.ping(0);
-            }
-        })
-        Thread.newThread(() => {
-            while (this.running) {
-                if (!this.connected() && this.url && this.apiKey) {
-                    if (this.url && this.apiKey) {
-                        try {
-                            this.connect(this.url, this.apiKey);
-                        } catch (e) {
-                            logger.error(`failed to connect websocket: ${e}`);
+        const pingingThread = Threads.createThread(
+            () => {
+                while (this.running) {
+                    Threads.sleep(PING_RATE);
+                    this.ping(0);
+                }
+            },
+            { debugId: "ws_pinging" },
+        );
+        const connectionThread = Threads.createThread(
+            () => {
+                while (this.running) {
+                    if (!this.connected() && this.url && this.apiKey) {
+                        if (this.url != undefined && this.apiKey != undefined) {
+                            try {
+                                this.connect(this.url, this.apiKey);
+                            } catch (e) {
+                                logger.error(
+                                    `failed to connect websocket: ${e}`,
+                                );
+                            }
+                        } else {
+                            Threads.sleep(WebsocketConnection.RETRY_RATE);
                         }
                     } else {
-                        Thread.sleep(WebsocketConnection.RETRY_RATE);
                     }
-                } else {
                 }
-            }
-        })
+            },
+            { priority: Threads.Priorities.HIGHEST, debugId: "ws_connection" },
+        );
+        connectionThread.start();
+        pingingThread.start();
     }
-    
+
     public stop() {
         this.running = false;
         if (this.websocket === undefined) {
@@ -69,7 +82,7 @@ export class WebsocketConnection {
         const headers = new LuaMap<string, string>();
         headers.set("Authorization", `Bearer ${apiKey}`);
         http.websocketAsync(url, headers);
-        const event = Thread.pullEvent([
+        const event = Threads.pullEvent([
             "websocket_success",
             "websocket_failure",
         ]);
@@ -81,7 +94,7 @@ export class WebsocketConnection {
             );
         } else {
             logger.error(`websocket failed to connect ${event.error}`);
-            Thread.sleep(WebsocketConnection.RETRY_RATE);
+            Threads.sleep(WebsocketConnection.RETRY_RATE);
         }
 
         this.url = url;
@@ -92,7 +105,7 @@ export class WebsocketConnection {
         logger.trace("listing for websocket events");
         while (this.websocket !== undefined) {
             logger.trace("waiting for websocket event");
-            const event = Thread.pullEvent([
+            const event = Threads.pullEvent([
                 "websocket_closed",
                 "websocket_message",
             ]);
@@ -127,16 +140,20 @@ export class WebsocketConnection {
     public connected(): boolean {
         return this.websocket !== undefined;
     }
-    
+
     public send(message: any) {
         if (this.running) {
-            logger.error("websocket connection is stopped, unable to send message");
+            logger.error(
+                "websocket connection is stopped, unable to send message",
+            );
             return;
         }
 
         while (this.websocket === undefined) {
-            logger.warn("websocket not connected, unable to send message, retrying...");
-            Thread.yield();
+            logger.warn(
+                "websocket not connected, unable to send message, retrying...",
+            );
+            Threads.yield();
         }
         const data = pack(message);
         logger.debug(
@@ -150,7 +167,7 @@ export class WebsocketConnection {
             logger.warn("websocket not connected, skipping ping");
             return;
         }
-        const data = pack([0, value]);
+        const data = pack([BASE_ROUTES.PING, value]);
         logger.debug(
             `pinging websocket with value ${value} pack-b64: ${base64encode(data)}`,
         );

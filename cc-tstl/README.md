@@ -1,13 +1,20 @@
 # cc-tstl-template
 Template project for ComputerCraft programs written in TypeScript. Uses [TypeScriptToLua](https://typescripttolua.github.io) to compile with ComputerCraft typing declarations.
 
-## Usage
-1. Clone the repository (or download the ZIP). You can also use the [Use this template](https://github.com/MCJack123/cc-tstl-template/generate) button on GitHub to fork the repo directly.
-2. Run `npm install` to install dependencies, including TypeScriptToLua.
-3. Customize `package.json` if you want - it's not used in CC.
-4. Add your code to `main.ts`, and add other files as desired.
-5. Build the project with `npm run build`.
-6. Copy `main.lua` to ComputerCraft, either by copying into the computer folder, dropping on the terminal, using Pastebin, or with [CraftOS-PC Remote](https://remote.craftos-pc.cc) or [cloud-catcher](https://cloud-catcher.squiddev.cc).
+## Development with CraftOS-PC
+1. Run `npm install` to install TypeScriptToLua.
+2. Add code under `src/`.
+3. Run `npm run build`. It compiles directly into CraftOS-PC computer `0` at `cc-tstl/`; the build only replaces that directory.
+4. In CraftOS-PC, run `cc-tstl/main`.
+
+For Minecraft-compatible development, enable both emulator compatibility modes once from the CraftOS-PC shell, then fully restart CraftOS-PC:
+
+```text
+config set standardsMode true
+config set vanilla true
+```
+
+`vanilla` removes CraftOS-PC-only APIs and graphics/server extensions; `standardsMode` also matches CC:T timing, abort, event-copying, audio, bytecode, and HTTP-handle behavior.
 
 ## Libraries
 

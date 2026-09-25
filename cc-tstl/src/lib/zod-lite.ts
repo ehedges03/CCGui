@@ -146,7 +146,12 @@ const literalSchema = <T extends string | number | boolean>(
 ): Schema<T> =>
     makeSchema<T>((input, ctx) => {
         if (input !== literal) {
-            addIssue(ctx, "Expected literal value", String(literal), String(input));
+            addIssue(
+                ctx,
+                "Expected literal value",
+                String(literal),
+                String(input),
+            );
             return { ok: false };
         }
         return { ok: true, value: literal };
@@ -161,7 +166,9 @@ const arraySchema = <T>(item: Schema<T>): Schema<T[]> =>
         const output: T[] = [];
         for (let i = 0; i < input.length; i++) {
             const value = input[i];
-            const itemResult = withPath(ctx, i, () => item.safeParse(value, ctx));
+            const itemResult = withPath(ctx, i, () =>
+                item.safeParse(value, ctx),
+            );
             if (!itemResult.success) {
                 return { ok: false };
             }
@@ -187,7 +194,9 @@ const literalArraySchema = <const T extends Schema<unknown>[]>(
         for (let i = 0; i < item.length; i++) {
             const value = input[i];
             const schema = item[i];
-            const itemResult = withPath(ctx, i, () => schema.safeParse(value,ctx));
+            const itemResult = withPath(ctx, i, () =>
+                schema.safeParse(value, ctx),
+            );
             if (!itemResult.success) {
                 return { ok: false };
             }
@@ -198,9 +207,7 @@ const literalArraySchema = <const T extends Schema<unknown>[]>(
 
 const objectSchema = <S extends Shape>(shape: S): Schema<InferShape<S>> =>
     makeSchema<InferShape<S>>((input, ctx) => {
-        if (
-            typeof input !== "object" || Array.isArray(input)
-        ) {
+        if (typeof input !== "object" || Array.isArray(input)) {
             addIssue(ctx, "Expected object", "object", typeOf(input));
             return { ok: false };
         }
@@ -235,6 +242,7 @@ const unionSchema = <T extends Schema<unknown>[]>(
 
 const optionalSchema = <T>(schema: Schema<T>): Schema<T | undefined> =>
     schema.optional();
+
 export const z = {
     string: stringSchema,
     number: numberSchema,

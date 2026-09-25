@@ -1,91 +1,210 @@
 import { Logger } from "../lib/log";
+import { z } from "../lib/zod-lite";
 import { Events } from "./event";
 
-export namespace Thread {
-    const logger = new Logger("Thread");
+export namespace Threads {
+    let forceQuitted = false;
+    let currentThread: ThreadInternal | undefined = undefined;
+    const threads: Set<ThreadInternal> = new Set();
+    let yieldEventEmitted: boolean = false;
+
+    const logger = new Logger("Threads");
     export type ThreadId = number;
     export type ThreadFn = (...args: any[]) => any;
 
-    class ThreadState {
-        public readonly id: number;
-        public priority: number;
-        public readonly luaThread: LuaThread;
-        public readonly children: ThreadId[] = [];
+    export interface Runnable {
+        run: ThreadFn;
+    }
 
-        constructor(id: number, priority: number, co: LuaThread) {
-            this.id = id;
-            this.priority = priority;
-            this.luaThread = co;
+    export enum Priorities {
+        LOWEST = -2,
+        LOW = -1,
+        DEFAULT = 0,
+        HIGH = 1,
+        HIGHEST = 2,
+    }
+
+    class SimpleRunnable implements Runnable {
+        private fn: ThreadFn;
+
+        public constructor(fn: ThreadFn) {
+            this.fn = fn;
+        }
+
+        public run() {
+            this.fn();
         }
     }
 
-    const threads: Record<ThreadId, ThreadState> = {};
-    const newThreads: Record<ThreadId, ThreadState> = {};
-    let nextId: number = 0;
-    let currentThread: ThreadState | undefined = undefined;
-    
+    abstract class Thread {
+        public abstract start(): void;
+        public abstract isRunning(): ReturnType<(typeof coroutine)["status"]>;
+        public abstract setPriority(priority: number): void;
+    }
+
+    type ThreadOptions = {
+        priority?: number;
+        debugId?: string;
+    };
+
+    let nextDebugId = 0;
+
+    class ThreadInternal implements Thread {
+        public priority: number;
+        public debugId: string;
+        public runnable: Runnable;
+        public luaThread: LuaThread | undefined;
+        public initialized = false;
+        public readonly children: ThreadInternal[] = [];
+
+        constructor(runnable: Runnable, options?: ThreadOptions) {
+            this.runnable = runnable;
+            this.priority = options?.priority || Priorities.DEFAULT;
+            this.debugId = options?.debugId || tostring(nextDebugId++);
+        }
+
+        public start() {
+            if (this.luaThread !== undefined) {
+                logger.error(
+                    `tried to start thread ${this.debugId} but it had already started`,
+                );
+                return;
+            }
+
+            logger.trace(`starting thread: ${this.debugId}`);
+            this.luaThread = buildLuaThread(() => this.runnable.run());
+            threads.add(this);
+        }
+
+        public resume(event?: Events.Event) {
+            if (this.luaThread === undefined) {
+                logger.error(
+                    `tried to resume a non started thread ${this.debugId}`,
+                );
+                return;
+            }
+
+            if (event === undefined && this.initialized) {
+                logger.error(
+                    `tried to initialize a thread ${this.debugId} that was already initialized`,
+                );
+                return;
+            }
+
+            logger.trace(
+                `${event === undefined ? "initailizing" : "resuming"} thread ${this.debugId}`,
+            );
+            const lastCurrentThread = currentThread;
+            currentThread = this;
+            const [ok, result] =
+                event === undefined
+                    ? coroutine.resume(this.luaThread)
+                    : coroutine.resume(this.luaThread, event);
+            currentThread = lastCurrentThread;
+            if (!ok) {
+                logger.error(
+                    `thread ${this.debugId} failed: ${tostring(result)}`,
+                );
+                threads.delete(this);
+            } else if (coroutine.status(this.luaThread) === "dead") {
+                threads.delete(this);
+            }
+        }
+
+        public isRunning() {
+            if (this.luaThread === undefined) {
+                return "suspended";
+            }
+
+            return coroutine.status(this.luaThread);
+        }
+
+        public setPriority(priority: number): void {
+            this.priority = priority;
+        }
+    }
+
     function buildLuaThread(fn: ThreadFn): LuaThread {
         return coroutine.create((...args: any[]) => fn(...args));
     }
 
-    export function newThread(fn: ThreadFn, priority: number = 0): ThreadId {
-        const id = nextId++;
-        logger.trace(`new thread: ${id}`);
-        const luaThread = buildLuaThread(fn);
-        const thread = new ThreadState(id, priority, luaThread);
-        newThreads[id] = thread;
-        if (currentThread !== undefined) {
-            currentThread.children.push(id);
+    function getRunnable(runnableOrFn: ThreadFn | Runnable): Runnable {
+        if (typeof runnableOrFn === "function") {
+            return new SimpleRunnable(runnableOrFn);
         }
-        return id;
+
+        return runnableOrFn;
     }
-    
+
+    export function createThread(
+        runnableOrFn: ThreadFn | Runnable,
+        options?: ThreadOptions,
+    ): Thread {
+        const thread = new ThreadInternal(getRunnable(runnableOrFn), options);
+        if (currentThread !== undefined) {
+            currentThread.children.push(thread);
+        }
+        return thread;
+    }
+
     export function sleep(timeout: number = 0) {
         const id = os.startTimer(timeout);
-        return ["timer", id];
+        while (pullEvent(["timer"]).id !== id) {}
     }
-    
-    let yieldEventEmitted: boolean = false;
-    
+
     // @ts-ignore
     export function yield() {
         if (!yieldEventEmitted) {
             Events.Yield.emit();
             yieldEventEmitted = true;
         }
-        pullEvent(["yield"])
+        pullEvent(["yield"]);
     }
-    
+
     export function pullAnyEvent(): Events.Event {
         const [event] = coroutine.yield();
         if (!(event instanceof Events.Event)) {
-            throw `Unexpected event: ${event}`;
+            throw `unexpected event: ${event}`;
         }
         return event;
     }
 
-    export function pullEvent<T extends Events.EventType[]>(events: T): Events.EventToClass[T[number]] {
+    export function pullEvent<T extends Events.EventType[]>(
+        events: T,
+    ): Events.EventToClass[T[number]] {
         let event: Events.Event | undefined;
         do {
             event = pullAnyEvent();
-            logger.trace(`pulling event: ${event.get_name()} and matching ${events.join(", ")}`);
+            logger.trace(
+                `pulling event: ${event.get_name()} and matching ${events.join(", ")}`,
+            );
             if (!events.includes(event.get_name())) {
                 event = undefined;
             }
-        }while(event === undefined);
+        } while (event === undefined);
 
         return event as Events.EventToClass[T[number]];
     }
-    
+
     export function run() {
-        while (true) {
-            for (const thread of Object.values(newThreads).sort((a, b) => b.priority - a.priority)) {
-                coroutine.resume(thread.luaThread);
-                delete newThreads[thread.id];
-                if (coroutine.status(thread.luaThread) !== "dead") {
-                    threads[thread.id] = thread;
+        while (!forceQuitted) {
+            let threadsToInitialize: ThreadInternal[] = [];
+            do {
+                threadsToInitialize = [];
+
+                for (const thread of threads) {
+                    if (!thread.initialized) {
+                        threadsToInitialize.push(thread);
+                    }
                 }
-            }
+
+                for (const thread of threadsToInitialize.sort(
+                    (a, b) => b.priority - a.priority,
+                )) {
+                    thread.resume();
+                    thread.initialized = true;
+                }
+            } while (threadsToInitialize.length !== 0);
 
             const event = Events.pullEventRaw();
             logger.trace(`pulled event: ${event.get_name()}`);
@@ -93,19 +212,21 @@ export namespace Thread {
                 yieldEventEmitted = false;
             }
 
-            logger.trace(`resuming ${Object.values(threads).length} threads`);
-            for (const thread of Object.values(threads).sort((a, b) => b.priority - a.priority)) {
-                logger.trace(`resuming thread: ${thread.id}`);
-                coroutine.resume(thread.luaThread, event);
-                if (coroutine.status(thread.luaThread) === "dead") {
-                    delete threads[thread.id];
-                }
+            logger.trace(`resuming ${threads.size} threads`);
+            for (const thread of [...threads].sort(
+                (a, b) => b.priority - a.priority,
+            )) {
+                thread.resume(event);
             }
-            
-            if (Object.values(threads).length === 0 && Object.values(newThreads).length === 0) {
+
+            if (threads.size === 0) {
                 logger.info("no more threads to run, exiting");
                 break;
             }
         }
+    }
+
+    export function stopScheduler() {
+        forceQuitted = true;
     }
 }
