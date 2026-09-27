@@ -1,8 +1,6 @@
-import { Logger } from "./lib/log";
+import { log } from "./lib/log";
 import { WebsocketConnection } from "./services/WebsocketConnection";
 import { Threads } from "./system/threads";
-
-const logger = new Logger("Application");
 
 export class Application implements Threads.Runnable {
     public run() {
@@ -22,6 +20,6 @@ export class Application implements Threads.Runnable {
             }
         }
         wsService.stop();
-        logger.info("done");
+        log.info("application done");
     }
 }

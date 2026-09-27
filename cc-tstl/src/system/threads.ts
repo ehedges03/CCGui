@@ -1,4 +1,4 @@
-import { Logger } from "../lib/log";
+import { log } from "../lib/log";
 import { z } from "../lib/zod-lite";
 import { Events } from "./event";
 
@@ -7,8 +7,6 @@ export namespace Threads {
     let currentThread: ThreadInternal | undefined = undefined;
     const threads: Set<ThreadInternal> = new Set();
     let yieldEventEmitted: boolean = false;
-
-    const logger = new Logger("Threads");
     export type ThreadId = number;
     export type ThreadFn = (...args: any[]) => any;
 
@@ -69,19 +67,21 @@ export namespace Threads {
 
         public start() {
             if (this.luaThread !== undefined) {
-                logger.error(
-                    `tried to start thread ${this.debugId} but it had already started`,
+                log.error(
+                    "tried to start thread but it had already started",
+                    "debugId",
+                    this.debugId,
                 );
                 return;
             }
 
-            logger.trace(`starting thread: ${this.debugId}`);
+            log.trace("starting thread", "debugId", this.debugId);
             this.luaThread = buildLuaThread(() => this.runnable.run());
             threads.add(this);
         }
 
         protected handleRemoval() {
-            logger.trace(`handling removal of ${this.debugId}`);
+            log.trace("handling thread removal", "debugId", this.debugId);
             for (const child of this.children) {
                 child.handleRemoval();
             }
@@ -91,21 +91,27 @@ export namespace Threads {
 
         public resume(event?: Events.Event) {
             if (this.luaThread === undefined) {
-                logger.error(
-                    `tried to resume a non started thread ${this.debugId}`,
+                log.error(
+                    "tried to resume a non started thread",
+                    "debugId",
+                    this.debugId,
                 );
                 return;
             }
 
             if (event === undefined && this.initialized) {
-                logger.error(
-                    `tried to initialize a thread ${this.debugId} that was already initialized`,
+                log.error(
+                    "tried to initialize a thread that was already initialized",
+                    "debugId",
+                    this.debugId,
                 );
                 return;
             }
 
-            logger.trace(
-                `${event === undefined ? "initailizing" : "resuming"} thread ${this.debugId}`,
+            log.trace(
+                event === undefined ? "initializing thread" : "resuming thread",
+                "debugId",
+                this.debugId,
             );
             const lastCurrentThread = currentThread;
             currentThread = this;
@@ -115,8 +121,12 @@ export namespace Threads {
                     : coroutine.resume(this.luaThread, event);
             currentThread = lastCurrentThread;
             if (!ok) {
-                logger.error(
-                    `thread ${this.debugId} failed: ${tostring(result)}`,
+                log.error(
+                    "thread failed",
+                    "debugId",
+                    this.debugId,
+                    "err",
+                    tostring(result),
                 );
                 this.handleRemoval();
             } else if (coroutine.status(this.luaThread) === "dead") {
@@ -188,8 +198,12 @@ export namespace Threads {
         let event: Events.Event | undefined;
         do {
             event = pullAnyEvent();
-            logger.trace(
-                `pulling event: ${event.get_name()} and matching ${events.join(", ")}`,
+            log.trace(
+                "pulling event",
+                "event",
+                event.get_name(),
+                "matching",
+                events.join(", "),
             );
             if (!events.includes(event.get_name())) {
                 event = undefined;
@@ -220,12 +234,12 @@ export namespace Threads {
             } while (threadsToInitialize.length !== 0);
 
             const event = Events.pullEventRaw();
-            logger.trace(`pulled event: ${event.get_name()}`);
+            log.trace("pulled event", "event", event.get_name());
             if (event instanceof Events.Yield) {
                 yieldEventEmitted = false;
             }
 
-            logger.trace(`resuming ${threads.size} threads`);
+            log.trace("resuming threads", "count", threads.size);
             for (const thread of [...threads].sort(
                 (a, b) => b.priority - a.priority,
             )) {
@@ -239,7 +253,7 @@ export namespace Threads {
                 }
             }
             if (!blockingThreadsRemain) {
-                logger.info("no more threads to run, exiting");
+                log.info("no more threads to run, exiting");
                 break;
             }
         }

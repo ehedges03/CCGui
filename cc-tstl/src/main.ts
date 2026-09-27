@@ -1,14 +1,20 @@
 import { Application } from "./Application";
-import { Logger } from "./lib/log";
-import { WebsocketConnection } from "./services/WebsocketConnection";
+import { log, LogLevel } from "./lib/log";
 import { Threads } from "./system/threads";
 
-const logger = new Logger("Main");
+log.setLevel(LogLevel.DEBUG);
+
 const ctrlCListenerThread = Threads.createThread(
     () => {
         let ctrlDown = false;
         let cDown = false;
-        logger.info(`looking for c ${keys.c} and ctrl ${keys.leftCtrl}`);
+        log.info(
+            "listening for Ctrl+C",
+            "c_key",
+            keys.c,
+            "ctrl_key",
+            keys.leftCtrl,
+        );
 
         while (ctrlDown === false || cDown === false) {
             const keyEvent = Threads.pullEvent(["key_up", "key"]);
@@ -18,8 +24,7 @@ const ctrlCListenerThread = Threads.createThread(
                 cDown = !keyEvent.isUp;
             }
         }
-        logger.info("Ctrl+C triggered exiting program...");
-        print(debug.traceback());
+        log.info("Ctrl+C triggered exiting program...");
         Threads.stopScheduler();
     },
     { priority: Threads.Priority.HIGHEST, blocking: false },

@@ -1,10 +1,8 @@
 import { pack, unpack } from "../lib/MessagePack";
-import { Logger } from "../lib/log";
+import { getDefault, type Logger } from "../lib/log";
 import { base64encode } from "../lib/utils";
 import { Events } from "../system/event";
 import { Threads } from "../system/threads";
-
-const logger = new Logger("WebsocketConnection");
 
 type Listener = (message: any) => void;
 
@@ -35,6 +33,12 @@ export type ConnectionStatus =
 export class WebsocketConnection {
     private static readonly RETRY_RATE = 10;
     private readonly connectionId = nextConnectionId++;
+
+    private get log(): Logger {
+        return getDefault()
+            .with("component", "WebsocketConnection")
+            .with("connectionId", this.connectionId);
+    }
     private status: ConnectionStatus = {
         state: "stopped",
         reason: "requested",
@@ -88,7 +92,7 @@ export class WebsocketConnection {
     public stop() {
         this.setStatus({ state: "stopped", reason: "requested" });
         if (this.websocket === undefined) {
-            logger.warn("websocket not connected, skipping close");
+            this.log.warn("websocket not connected, skipping close");
             return;
         }
         this.websocket.close();
@@ -120,20 +124,18 @@ export class WebsocketConnection {
             "websocket_failure",
         ]);
 
-        logger.trace(`websocket event: ${event.get_name()}`);
+        this.log.trace("websocket event", "event", event.get_name());
         if (event.get_name() === "websocket_success") {
             this.websocket = event.handle;
             this.setStatus({ state: "connected" });
-            logger.debug(
-                `websocket connected to ${this.url} with handle ${this.websocket}`,
-            );
+            this.log.debug("websocket connected", "url", this.url);
         } else {
             this.setStatus({
                 state: "connecting",
                 attempts: attempts + 1,
                 lastError: event.error,
             });
-            logger.error(`websocket failed to connect ${event.error}`);
+            this.log.error("websocket failed to connect", "err", event.error);
             Threads.sleep(WebsocketConnection.RETRY_RATE);
             return false;
         }
@@ -141,9 +143,9 @@ export class WebsocketConnection {
     }
 
     private handle() {
-        logger.trace("listing for websocket events");
+        this.log.trace("listening for websocket events");
         while (this.websocket !== undefined) {
-            logger.trace("waiting for websocket event");
+            this.log.trace("waiting for websocket event");
             const event = Threads.pullEvent([
                 "websocket_closed",
                 "websocket_message",
@@ -152,11 +154,15 @@ export class WebsocketConnection {
                 continue;
             }
             if (event instanceof Events.WebSocketMessage) {
-                logger.trace("received websocket_message event");
+                this.log.trace("received websocket_message event");
                 this.handleMessage(event.content, event.isBinary);
             } else if (event instanceof Events.WebSocketClose) {
-                logger.info(
-                    `websocket closed reason=${event.reason ?? "unknown"} code=${event.code ?? "unknown"}`,
+                this.log.info(
+                    "websocket closed",
+                    "reason",
+                    event.reason ?? "unknown",
+                    "code",
+                    event.code ?? "unknown",
                 );
                 this.websocket.close();
                 this.websocket = undefined;
@@ -164,35 +170,39 @@ export class WebsocketConnection {
                 break;
             }
         }
-        logger.trace("exiting websocket listener");
+        this.log.trace("exiting websocket listener");
     }
 
     private handleMessage(message: string, isBinary: boolean) {
         if (!isBinary) {
-            logger.warn("received non-binary message, skipping");
+            this.log.warn("received non-binary message, skipping");
             return;
         }
         const data = unpack(message);
-        logger.debug(textutils.serialiseJSON(data));
+        this.log.debug("received websocket message", "data", data);
     }
 
     public send(message: any) {
         if (this.status.state !== "connected") {
-            logger.error(
+            this.log.error(
                 "websocket connection is stopped, unable to send message",
             );
             return;
         }
 
         while (this.websocket === undefined) {
-            logger.warn(
+            this.log.warn(
                 "websocket not connected, unable to send message, retrying...",
             );
             Threads.yield();
         }
         const data = pack(message);
-        logger.debug(
-            `sending websocket message ${message} pack-b64: ${base64encode(data)}`,
+        this.log.debug(
+            "sending websocket message",
+            "message",
+            message,
+            "pack_b64",
+            base64encode(data),
         );
         this.websocket.send(data, true);
     }
@@ -218,12 +228,16 @@ export class WebsocketConnection {
 
     public ping(value: number) {
         if (this.websocket === undefined) {
-            logger.warn("websocket not connected, skipping ping");
+            this.log.warn("websocket not connected, skipping ping");
             return;
         }
         const data = pack([BASE_ROUTES.PING, value]);
-        logger.debug(
-            `pinging websocket with value ${value} pack-b64: ${base64encode(data)}`,
+        this.log.debug(
+            "pinging websocket",
+            "value",
+            value,
+            "pack_b64",
+            base64encode(data),
         );
         this.websocket.send(data, true);
     }

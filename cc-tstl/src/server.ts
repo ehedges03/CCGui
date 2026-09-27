@@ -1,4 +1,4 @@
-import { Logger } from "./lib/log";
+import { log } from "./lib/log";
 import type { RawtermDelegate, RawtermRenderTarget, RawtermServerWindow } from "./lib/rawterm";
 
 type RawtermModule = typeof import("./lib/rawterm");
@@ -11,7 +11,6 @@ const MIN_CC_VERSION = "1.85.0";
 const REMOTE_WS_BASE_URL = "wss://remote.craftos-pc.cc/";
 const REMOTE_HTTP_BASE_URL = "https://remote.craftos-pc.cc/";
 const RAWTERM_EXPECTED_SIZE = 31339;
-const logger = new Logger("Server");
 
 function versionToParts(version: string): [number, number, number] {
     const parts = version.split(".");
@@ -54,7 +53,7 @@ function ensureStringPackPolyfill(): void {
     const stringLib = (globalThis as any).string as { pack?: (...args: unknown[]) => string };
     if (stringLib?.pack) return;
     if (!fs.exists("string_pack.lua")) {
-        logger.info("Downloading string.pack polyfill...");
+        log.info("downloading string.pack polyfill");
         const source = downloadText(REMOTE_HTTP_BASE_URL + "string_pack.lua");
         const [handle, openError] = fs.open("string_pack.lua", "w");
         if (!handle) {
@@ -72,7 +71,7 @@ function ensureStringPackPolyfill(): void {
 function loadRawtermModule(): RawtermModule {
     let rawtermModule: RawtermModule | undefined;
     if (!fs.exists("rawterm.lua") || fs.getSize("rawterm.lua") !== RAWTERM_EXPECTED_SIZE) {
-        logger.info("Downloading rawterm API...");
+        log.info("downloading rawterm API");
         const source = downloadText(REMOTE_HTTP_BASE_URL + "rawterm.lua");
         if (fs.getFreeSpace("/") >= source.length + 4096) {
             const [handle, openError] = fs.open("rawterm.lua", "w");
@@ -154,7 +153,7 @@ const args = table.pack(...(arg || []));
 const serverId = args[1] as string;
 const programName = args[2] as string | undefined;
 
-logger.info("Connecting to " + REMOTE_WS_BASE_URL + "...");
+log.info("connecting to remote server", "url", REMOTE_WS_BASE_URL);
 const [baseDelegate, connectError] = rawterm.wsDelegate(REMOTE_WS_BASE_URL + serverId);
 if (!baseDelegate) {
     error("Could not connect to server: " + connectError);

@@ -1,12 +1,11 @@
 // You may comment out any events you don't need to save space. Make sure to
 // delete them from eventInitializers as well.
 // import { running } from "../main";
-import { Logger } from "../lib/log";
+import { log } from "../lib/log";
 import { z, type Schema } from "../lib/zod-lite";
 import type { MetricsData, ResourceMetrics } from "../metrics";
 
 export namespace Events {
-    const logger = new Logger("Events");
     const parseEventArgs = <T>(args: unknown[], schema: Schema<T>): T => {
         const parsed = schema.safeParse(args);
         if (!parsed.success) {
@@ -783,7 +782,7 @@ export namespace Events {
     export function pullEventRaw(filter?: EventType): Event {
         let args = table.pack(...coroutine.yield(filter));
         const val = args[0];
-        logger.trace(val);
+        log.trace("pulling raw event", "event", val);
         const initializer = eventInitializers[val as EventType];
         if (initializer !== undefined) {
             const event = initializer(args);
