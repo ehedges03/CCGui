@@ -33,3 +33,15 @@ declare global {
     /** @customName bit32 */
     const bit: typeof bit32;
 }
+
+declare global {
+    var __TS__sourcemap:
+        | Record<
+              string,
+              Record<
+                  string,
+                  number | { file: string; line: number } | undefined
+              >
+          >
+        | undefined;
+}

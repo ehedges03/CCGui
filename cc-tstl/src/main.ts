@@ -3,7 +3,7 @@ import { Logger } from "./lib/log";
 import { WebsocketConnection } from "./services/WebsocketConnection";
 import { Threads } from "./system/threads";
 
-const logger = new Logger("main");
+const logger = new Logger("Main");
 const ctrlCListenerThread = Threads.createThread(
     () => {
         let ctrlDown = false;
@@ -19,14 +19,15 @@ const ctrlCListenerThread = Threads.createThread(
             }
         }
         logger.info("Ctrl+C triggered exiting program...");
+        print(debug.traceback());
         Threads.stopScheduler();
     },
-    { priority: Threads.Priorities.HIGHEST },
+    { priority: Threads.Priority.HIGHEST, blocking: false },
 );
 
 ctrlCListenerThread.start();
-const wsService = new WebsocketConnection();
-const application = new Application(wsService);
+
+const application = new Application();
 const mainThread = Threads.createThread(application, { debugId: "app" });
 mainThread.start();
 

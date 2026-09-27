@@ -10,20 +10,45 @@ type Listener = (message: any) => void;
 
 // Seconds between pings
 const PING_RATE = 30;
+const MAX_RETRIES = 3;
+let nextConnectionId = 0;
 
 enum BASE_ROUTES {
     PING = 0,
     PONG = 1,
 }
 
+export type ConnectionStatus =
+    | {
+          state: "connected";
+      }
+    | {
+          state: "connecting";
+          attempts: number;
+          lastError?: string;
+      }
+    | {
+          state: "stopped";
+          reason: "requested" | "exhausted" | "no_creds";
+      };
+
 export class WebsocketConnection {
     private static readonly RETRY_RATE = 10;
-    private running = true;
+    private readonly connectionId = nextConnectionId++;
+    private status: ConnectionStatus = {
+        state: "stopped",
+        reason: "requested",
+    };
     private url: string | undefined;
     private apiKey: string | undefined;
 
     private websocket: WebSocket | undefined;
     private lastPingPongTime: number = 0;
+
+    private setStatus(status: ConnectionStatus): void {
+        this.status = status;
+        Events.WebSocketConnectionState.emit(this.connectionId, status.state);
+    }
 
     public setUrl(url: string) {
         this.url = url;
@@ -34,10 +59,14 @@ export class WebsocketConnection {
     }
 
     public start() {
-        this.running = true;
+        if (this.websocket !== undefined) {
+            this.setStatus({ state: "connected" });
+        } else {
+            this.setStatus({ state: "connecting", attempts: 0 });
+        }
         const pingingThread = Threads.createThread(
             () => {
-                while (this.running) {
+                while (this.status.state !== "stopped") {
                     Threads.sleep(PING_RATE);
                     this.ping(0);
                 }
@@ -46,31 +75,18 @@ export class WebsocketConnection {
         );
         const connectionThread = Threads.createThread(
             () => {
-                while (this.running) {
-                    if (!this.connected() && this.url && this.apiKey) {
-                        if (this.url != undefined && this.apiKey != undefined) {
-                            try {
-                                this.connect(this.url, this.apiKey);
-                            } catch (e) {
-                                logger.error(
-                                    `failed to connect websocket: ${e}`,
-                                );
-                            }
-                        } else {
-                            Threads.sleep(WebsocketConnection.RETRY_RATE);
-                        }
-                    } else {
-                    }
+                while (this.status.state === "connecting") {
+                    this.connect();
                 }
             },
-            { priority: Threads.Priorities.HIGHEST, debugId: "ws_connection" },
+            { priority: Threads.Priority.HIGHEST, debugId: "ws_connection" },
         );
         connectionThread.start();
         pingingThread.start();
     }
 
     public stop() {
-        this.running = false;
+        this.setStatus({ state: "stopped", reason: "requested" });
         if (this.websocket === undefined) {
             logger.warn("websocket not connected, skipping close");
             return;
@@ -78,26 +94,49 @@ export class WebsocketConnection {
         this.websocket.close();
     }
 
-    public connect(url: string, apiKey: string): boolean {
+    private connect(): boolean {
+        if (this.url === undefined || this.apiKey === undefined) {
+            this.setStatus({ state: "stopped", reason: "no_creds" });
+            return false;
+        }
+
+        let attempts = 0;
+        if (this.status.state === "connecting") {
+            attempts = this.status.attempts;
+        } else {
+            this.setStatus({ state: "connecting", attempts });
+        }
+
+        if (attempts >= MAX_RETRIES) {
+            this.setStatus({ state: "stopped", reason: "exhausted" });
+            return false;
+        }
+
         const headers = new LuaMap<string, string>();
-        headers.set("Authorization", `Bearer ${apiKey}`);
-        http.websocketAsync(url, headers);
+        headers.set("Authorization", `Bearer ${this.apiKey}`);
+        http.websocketAsync(this.url, headers);
         const event = Threads.pullEvent([
             "websocket_success",
             "websocket_failure",
         ]);
+
         logger.trace(`websocket event: ${event.get_name()}`);
         if (event.get_name() === "websocket_success") {
             this.websocket = event.handle;
+            this.setStatus({ state: "connected" });
             logger.debug(
-                `websocket connected to ${url} with handle ${this.websocket}`,
+                `websocket connected to ${this.url} with handle ${this.websocket}`,
             );
         } else {
+            this.setStatus({
+                state: "connecting",
+                attempts: attempts + 1,
+                lastError: event.error,
+            });
             logger.error(`websocket failed to connect ${event.error}`);
             Threads.sleep(WebsocketConnection.RETRY_RATE);
+            return false;
         }
-
-        this.url = url;
         return true;
     }
 
@@ -137,12 +176,8 @@ export class WebsocketConnection {
         logger.debug(textutils.serialiseJSON(data));
     }
 
-    public connected(): boolean {
-        return this.websocket !== undefined;
-    }
-
     public send(message: any) {
-        if (this.running) {
+        if (this.status.state !== "connected") {
             logger.error(
                 "websocket connection is stopped, unable to send message",
             );
@@ -160,6 +195,25 @@ export class WebsocketConnection {
             `sending websocket message ${message} pack-b64: ${base64encode(data)}`,
         );
         this.websocket.send(data, true);
+    }
+
+    public getState(): ConnectionStatus["state"] {
+        return this.status.state;
+    }
+
+    public isConnected(): boolean {
+        return this.status.state === "connected";
+    }
+
+    public waitForConnectionState(): "connected" | "stopped" {
+        while (this.status.state === "connecting") {
+            const event = Threads.pullEvent(["websocket_connection_state"]);
+            if (event.connectionId !== this.connectionId) {
+                continue;
+            }
+        }
+
+        return this.status.state;
     }
 
     public ping(value: number) {

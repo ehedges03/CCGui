@@ -37,6 +37,7 @@ export namespace Events {
         | "websocket_closed"
         | "websocket_success"
         | "websocket_failure"
+        | "websocket_connection_state"
         | "mouse_click"
         | "mouse_up"
         | "mouse_scroll"
@@ -507,6 +508,43 @@ export namespace Events {
         }
     }
 
+    const websocketConnectionStateArgsSchema = z.literalArray([
+        z.literal("websocket_connection_state"),
+        z.number(),
+        z.union([
+            z.literal("connected"),
+            z.literal("connecting"),
+            z.literal("stopped"),
+        ]),
+    ]);
+
+    export class WebSocketConnectionState extends Event {
+        public connectionId = 0;
+        public state: "connected" | "connecting" | "stopped" = "stopped";
+        public get_name() {
+            return "websocket_connection_state" as const;
+        }
+        public get_args() {
+            return [this.connectionId, this.state];
+        }
+        public static init(args: unknown[]) {
+            const [, connectionId, state] = parseEventArgs(
+                args,
+                websocketConnectionStateArgsSchema,
+            );
+            const event = new WebSocketConnectionState();
+            event.connectionId = connectionId;
+            event.state = state;
+            return event;
+        }
+        public static emit(
+            connectionId: number,
+            state: WebSocketConnectionState["state"],
+        ) {
+            os.queueEvent("websocket_connection_state", connectionId, state);
+        }
+    }
+
     export enum MouseEventType {
         Click,
         Up,
@@ -720,6 +758,7 @@ export namespace Events {
         websocket_closed: WebSocketClose.init,
         websocket_success: WebSocketConnect.init,
         websocket_failure: WebSocketConnect.init,
+        websocket_connection_state: WebSocketConnectionState.init,
         mouse_click: Mouse.init,
         mouse_up: Mouse.init,
         mouse_scroll: Mouse.init,

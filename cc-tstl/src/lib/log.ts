@@ -9,13 +9,29 @@ export enum LogLevel {
 // Logging configuration
 export const LOG_LEVEL: LogLevel = LogLevel.TRACE;
 export const LOG_INCLUDE_LINE: boolean = true;
+export const LOG_INCLUDE_SOURCE: boolean = true;
 export const LOG_INCLUDE_FUNCTION: boolean = false;
+let whatInfo = "";
+export function updateWhatInfo() {
+    whatInfo = "";
+    if (LOG_INCLUDE_LINE) {
+        whatInfo += "l";
+    }
+    if (LOG_INCLUDE_FUNCTION) {
+        whatInfo += "n";
+    }
+    if (LOG_INCLUDE_SOURCE) {
+        whatInfo += "S";
+    }
+}
+
+updateWhatInfo();
 
 const levelNames: string[] = ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"];
 
-type CallerInfo = {
-    line?: number;
-    func?: string;
+type CallerInfo = ReturnType<typeof debug.getinfo> & {
+    calculatedLine?: number;
+    calculatedFile?: string;
 };
 
 const getCallerInfo = (depth: number): CallerInfo => {
@@ -27,32 +43,45 @@ const getCallerInfo = (depth: number): CallerInfo => {
         return {};
     }
 
-    const info = debug.getinfo(depth, "Slfn") as any;
+    const info = debug.getinfo(depth, whatInfo);
     if (!info) return {};
+    let line = info.currentline;
+    let file = info.short_src;
+    if (line && file && _G.__TS__sourcemap) {
+        let tsLine = _G.__TS__sourcemap[file][tostring(line)];
+        if (tsLine) {
+            line = typeof tsLine === "object" ? tsLine.line : tsLine;
+            file = file.split(".")[0] + ".ts";
+        }
+    }
 
     return {
-        line: LOG_INCLUDE_LINE ? (info.currentline as number | undefined) : undefined,
-        func: LOG_INCLUDE_FUNCTION
-            ? ((info.name as string | undefined) ??
-                  (info.what as string | undefined))
-            : undefined,
+        ...info,
+        calculatedLine: line,
+        calculatedFile: file,
     };
 };
 
 const formatCallerInfo = (caller: CallerInfo): string => {
     const parts: string[] = [];
-    if (caller.line !== undefined) {
-        parts.push(tostring(caller.line));
+    if (caller.calculatedFile !== undefined) {
+        parts.push(tostring(caller.calculatedFile));
+    }
+    if (caller.calculatedLine !== undefined) {
+        parts.push(tostring(caller.calculatedLine));
     }
     const location = parts.length > 0 ? ` (${parts.join(":")})` : "";
-    const funcPart =
-        caller.func !== undefined ? ` ${caller.func}` : "";
+    const funcPart = caller.name !== undefined ? ` ${caller.func}` : "";
     return `${funcPart}${location}`;
 };
 
 const shouldLog = (level: LogLevel) => level >= LOG_LEVEL;
 
-const logInternal = (level: LogLevel, message: unknown, loggerName?: string) => {
+const logInternal = (
+    level: LogLevel,
+    message: unknown,
+    loggerName?: string,
+) => {
     if (!shouldLog(level)) return;
 
     const name = levelNames[level] ?? "INFO";
@@ -65,7 +94,7 @@ const logInternal = (level: LogLevel, message: unknown, loggerName?: string) => 
 export class Logger {
     public readonly name: string;
 
-    constructor(name: string) {
+    constructor(name: string, sourceName?: string) {
         this.name = name;
     }
 

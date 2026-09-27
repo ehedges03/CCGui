@@ -16,7 +16,7 @@ export namespace Threads {
         run: ThreadFn;
     }
 
-    export enum Priorities {
+    export enum Priority {
         LOWEST = -2,
         LOW = -1,
         DEFAULT = 0,
@@ -43,24 +43,28 @@ export namespace Threads {
     }
 
     type ThreadOptions = {
-        priority?: number;
+        priority?: Priority;
         debugId?: string;
+        // Whether or not this threads existence should block application closure (default: true)
+        blocking?: boolean;
     };
 
     let nextDebugId = 0;
 
     class ThreadInternal implements Thread {
-        public priority: number;
+        public priority: Priority;
         public debugId: string;
         public runnable: Runnable;
         public luaThread: LuaThread | undefined;
         public initialized = false;
+        public blocking;
         public readonly children: ThreadInternal[] = [];
 
         constructor(runnable: Runnable, options?: ThreadOptions) {
             this.runnable = runnable;
-            this.priority = options?.priority || Priorities.DEFAULT;
-            this.debugId = options?.debugId || tostring(nextDebugId++);
+            this.priority = options?.priority ?? Priority.DEFAULT;
+            this.debugId = options?.debugId ?? tostring(nextDebugId++);
+            this.blocking = options?.blocking ?? true;
         }
 
         public start() {
@@ -74,6 +78,15 @@ export namespace Threads {
             logger.trace(`starting thread: ${this.debugId}`);
             this.luaThread = buildLuaThread(() => this.runnable.run());
             threads.add(this);
+        }
+
+        protected handleRemoval() {
+            logger.trace(`handling removal of ${this.debugId}`);
+            for (const child of this.children) {
+                child.handleRemoval();
+            }
+
+            threads.delete(this);
         }
 
         public resume(event?: Events.Event) {
@@ -105,9 +118,9 @@ export namespace Threads {
                 logger.error(
                     `thread ${this.debugId} failed: ${tostring(result)}`,
                 );
-                threads.delete(this);
+                this.handleRemoval();
             } else if (coroutine.status(this.luaThread) === "dead") {
-                threads.delete(this);
+                this.handleRemoval();
             }
         }
 
@@ -218,8 +231,14 @@ export namespace Threads {
             )) {
                 thread.resume(event);
             }
-
-            if (threads.size === 0) {
+            let blockingThreadsRemain = false;
+            for (const thread of threads) {
+                if (thread.blocking) {
+                    blockingThreadsRemain = true;
+                    break;
+                }
+            }
+            if (!blockingThreadsRemain) {
                 logger.info("no more threads to run, exiting");
                 break;
             }
