@@ -1,5 +1,9 @@
-import { log } from "./lib/log";
-import type { RawtermDelegate, RawtermRenderTarget, RawtermServerWindow } from "./lib/rawterm";
+import * as log from "./lib/log";
+import type {
+    RawtermDelegate,
+    RawtermRenderTarget,
+    RawtermServerWindow,
+} from "./lib/rawterm";
 
 type RawtermModule = typeof import("./lib/rawterm");
 
@@ -14,7 +18,11 @@ const RAWTERM_EXPECTED_SIZE = 31339;
 
 function versionToParts(version: string): [number, number, number] {
     const parts = version.split(".");
-    return [parseInt(parts[0] ?? "0"), parseInt(parts[1] ?? "0"), parseInt(parts[2] ?? "0")];
+    return [
+        parseInt(parts[0] ?? "0"),
+        parseInt(parts[1] ?? "0"),
+        parseInt(parts[2] ?? "0"),
+    ];
 }
 
 function requireMinVersion(minVersion: string): void {
@@ -25,21 +33,31 @@ function requireMinVersion(minVersion: string): void {
         version = string.gsub(os.version(), "CraftOS ", "")[0];
     } else {
         version = string.match(_HOST, "ComputerCraft ([0-9%.]+)")[0];
-    }    
+    }
 
     if (!version) {
         throw "Could not determine version of ComputerCraft";
     } else {
         const versionParts = versionToParts(version);
         const minParts = versionToParts(minVersion);
-        assert(versionParts[0] >= minParts[0] && versionParts[1] >= minParts[1] && versionParts[2] >= minParts[2], "This program requires ComputerCraft " + minVersion + " or later.");
+        assert(
+            versionParts[0] >= minParts[0] &&
+                versionParts[1] >= minParts[1] &&
+                versionParts[2] >= minParts[2],
+            "This program requires ComputerCraft " + minVersion + " or later.",
+        );
     }
 }
 
 function downloadText(url: string): string {
     const [response, errorMessage] = http.get(url);
     if (!response) {
-        throw "Could not download from " + url + ": " + (errorMessage || "unknown error");
+        throw (
+            "Could not download from " +
+            url +
+            ": " +
+            (errorMessage || "unknown error")
+        );
     }
     const body = response.readAll();
     response.close();
@@ -50,7 +68,9 @@ function downloadText(url: string): string {
 }
 
 function ensureStringPackPolyfill(): void {
-    const stringLib = (globalThis as any).string as { pack?: (...args: unknown[]) => string };
+    const stringLib = (globalThis as any).string as {
+        pack?: (...args: unknown[]) => string;
+    };
     if (stringLib?.pack) return;
     if (!fs.exists("string_pack.lua")) {
         log.info("downloading string.pack polyfill");
@@ -70,7 +90,10 @@ function ensureStringPackPolyfill(): void {
 
 function loadRawtermModule(): RawtermModule {
     let rawtermModule: RawtermModule | undefined;
-    if (!fs.exists("rawterm.lua") || fs.getSize("rawterm.lua") !== RAWTERM_EXPECTED_SIZE) {
+    if (
+        !fs.exists("rawterm.lua") ||
+        fs.getSize("rawterm.lua") !== RAWTERM_EXPECTED_SIZE
+    ) {
         log.info("downloading rawterm API");
         const source = downloadText(REMOTE_HTTP_BASE_URL + "rawterm.lua");
         if (fs.getFreeSpace("/") >= source.length + 4096) {
@@ -81,7 +104,9 @@ function loadRawtermModule(): RawtermModule {
             handle.write(source);
             handle.close();
         } else {
-            const loader = assert(load(source, "@rawterm.lua", "t")) as unknown as () => RawtermModule;
+            const loader = assert(
+                load(source, "@rawterm.lua", "t"),
+            ) as unknown as () => RawtermModule;
             rawtermModule = loader();
         }
     }
@@ -103,9 +128,19 @@ function wrapDelegate(base: RawtermDelegate): RawtermDelegate {
             if (!isOpen) return undefined;
             let packet = "";
             let expectedLength: number | undefined;
-            while (expectedLength === undefined || packet.length < expectedLength + 16 + (string.sub(packet, 1, 4) === "!CPD" ? 8 : 0)) {
+            while (
+                expectedLength === undefined ||
+                packet.length <
+                    expectedLength +
+                        16 +
+                        (string.sub(packet, 1, 4) === "!CPD" ? 8 : 0)
+            ) {
                 let [ok, rawResult] = pcall(baseReceive, base, timeout);
-                while (!ok && typeof rawResult === "string" && string.match(rawResult, "Terminated$")) {
+                while (
+                    !ok &&
+                    typeof rawResult === "string" &&
+                    string.match(rawResult, "Terminated$")
+                ) {
                     [ok, rawResult] = pcall(baseReceive, base, timeout);
                 }
                 if (!ok) error(rawResult as string);
@@ -117,7 +152,7 @@ function wrapDelegate(base: RawtermDelegate): RawtermDelegate {
                         string.match(result, "!CPC(%x%x%x%x)") ??
                             string.match(result, longPattern) ??
                             "",
-                        16
+                        16,
                     );
                 }
                 if (expectedLength !== undefined) {
@@ -129,9 +164,16 @@ function wrapDelegate(base: RawtermDelegate): RawtermDelegate {
         send: (data: string) => {
             if (!isOpen) return;
             for (let offset = 1; offset <= data.length; offset += 65530) {
-                baseSend.call(base, string.sub(data, offset, math.min(offset + 65529, data.length)));
+                baseSend.call(
+                    base,
+                    string.sub(
+                        data,
+                        offset,
+                        math.min(offset + 65529, data.length),
+                    ),
+                );
             }
-        }
+        },
     };
 }
 
@@ -141,8 +183,12 @@ interface MonitorEntry {
     window: RawtermServerWindow;
 }
 
-function packEvent(...values: unknown[]): LuaMultiReturn<any[]> & { n: number } {
-    return table.pack(...values) as unknown as LuaMultiReturn<any[]> & { n: number };
+function packEvent(
+    ...values: unknown[]
+): LuaMultiReturn<any[]> & { n: number } {
+    return table.pack(...values) as unknown as LuaMultiReturn<any[]> & {
+        n: number;
+    };
 }
 
 requireMinVersion(MIN_CC_VERSION);
@@ -154,7 +200,9 @@ const serverId = args[1] as string;
 const programName = args[2] as string | undefined;
 
 log.info("connecting to remote server", "url", REMOTE_WS_BASE_URL);
-const [baseDelegate, connectError] = rawterm.wsDelegate(REMOTE_WS_BASE_URL + serverId);
+const [baseDelegate, connectError] = rawterm.wsDelegate(
+    REMOTE_WS_BASE_URL + serverId,
+);
 if (!baseDelegate) {
     error("Could not connect to server: " + connectError);
 }
@@ -162,11 +210,14 @@ const delegate = wrapDelegate(baseDelegate);
 
 const basePeripheralCall = peripheral.call;
 
-function createPeripheralHost(name: string): Record<string, (...args: unknown[]) => unknown> {
+function createPeripheralHost(
+    name: string,
+): Record<string, (...args: unknown[]) => unknown> {
     const methodNames = peripheral.getMethods(name) || [];
     const host: Record<string, (...args: unknown[]) => unknown> = {};
     for (const methodName of methodNames) {
-        host[methodName] = (...args: unknown[]) => basePeripheralCall(name, methodName, ...args);
+        host[methodName] = (...args: unknown[]) =>
+            basePeripheralCall(name, methodName, ...args);
     }
     return host;
 }
@@ -177,8 +228,9 @@ const mainWindow = rawterm.server(
     termWidth,
     termHeight,
     0,
-    "ComputerCraft Remote Terminal: " + (os.computerLabel() || "Computer " + os.computerID()),
-    term.current() as unknown as RawtermRenderTarget
+    "ComputerCraft Remote Terminal: " +
+        (os.computerLabel() || "Computer " + os.computerID()),
+    term.current() as unknown as RawtermRenderTarget,
 );
 mainWindow.setVisible(false);
 
@@ -188,7 +240,12 @@ let isConnected = true;
 let refreshTimerId: number | undefined;
 let runtimeError: string | undefined;
 
-function createMonitorWindow(name: string, width: number, height: number, id: number): MonitorEntry {
+function createMonitorWindow(
+    name: string,
+    width: number,
+    height: number,
+    id: number,
+): MonitorEntry {
     const host = createPeripheralHost(name);
     const window = rawterm.server(
         delegate,
@@ -199,7 +256,7 @@ function createMonitorWindow(name: string, width: number, height: number, id: nu
         host as RawtermRenderTarget,
         undefined,
         undefined,
-        true
+        true,
     );
     window.setVisible(false);
     return { id, name, window };
@@ -210,38 +267,62 @@ for (let i = 1; i <= foundMonitors.n; i++) {
     const monitor = foundMonitors[i] as unknown as any;
     const monitorName = peripheral.getName(monitor as unknown as any);
     const [width, height] = monitor.getSize();
-    monitorsByName[monitorName] = createMonitorWindow(monitorName, width, height, nextMonitorId);
+    monitorsByName[monitorName] = createMonitorWindow(
+        monitorName,
+        width,
+        height,
+        nextMonitorId,
+    );
     nextMonitorId += 1;
 }
 
 peripheral.call = ((name: string, method: string, ...args: unknown[]) => {
     const entry = monitorsByName[name];
     if (entry !== undefined) {
-        return (entry.window as unknown as Record<string, (...args: unknown[]) => unknown>)[method](...args);
+        return (
+            entry.window as unknown as Record<
+                string,
+                (...args: unknown[]) => unknown
+            >
+        )[method](...args);
     }
     return basePeripheralCall(name, method, ...args);
 }) as typeof peripheral.call;
 
 const previousTerm = term.redirect(mainWindow as unknown as ITerminal);
 
-const [parallelOk, parallelError] = pcall(parallel.waitForAny,
+const [parallelOk, parallelError] = pcall(
+    parallel.waitForAny,
     () => {
         const shellCoroutine = coroutine.create(shell.run);
-        const shellProgram = programName || (settings.get("bios.use_multishell") && "multishell") || "shell";
-        let [resumeOk, resumeValue] = coroutine.resume(shellCoroutine, shellProgram);
+        const shellProgram =
+            programName ||
+            (settings.get("bios.use_multishell") && "multishell") ||
+            "shell";
+        let [resumeOk, resumeValue] = coroutine.resume(
+            shellCoroutine,
+            shellProgram,
+        );
         while (resumeOk && coroutine.status(shellCoroutine) === "suspended") {
             let event = packEvent();
             const eventFilter = resumeValue as string | undefined;
             const waiters: Array<() => void> = [
                 () => {
                     event = packEvent(mainWindow.pullEvent(eventFilter, true));
-                }
+                },
             ];
             for (const [name, entry] of pairs(monitorsByName)) {
                 waiters.push(() => {
-                    event = packEvent(entry.window.pullEvent(eventFilter, true));
+                    event = packEvent(
+                        entry.window.pullEvent(eventFilter, true),
+                    );
                     if (event[1] === "mouse_click") {
-                        event = packEvent("monitor_touch", name, event[3], event[4]);
+                        event = packEvent(
+                            "monitor_touch",
+                            name,
+                            event[3],
+                            event[4],
+                        );
                     } else if (
                         event[1] === "mouse_up" ||
                         event[1] === "mouse_drag" ||
@@ -257,8 +338,10 @@ const [parallelOk, parallelError] = pcall(parallel.waitForAny,
                     event = packEvent(os.pullEventRaw(eventFilter));
                     if (
                         !(
-                            (event[1] === "websocket_message" && event[2] === REMOTE_WS_BASE_URL + serverId) ||
-                            (event[1] === "timer" && event[2] === refreshTimerId)
+                            (event[1] === "websocket_message" &&
+                                event[2] === REMOTE_WS_BASE_URL + serverId) ||
+                            (event[1] === "timer" &&
+                                event[2] === refreshTimerId)
                         )
                     ) {
                         break;
@@ -267,7 +350,10 @@ const [parallelOk, parallelError] = pcall(parallel.waitForAny,
             });
             parallel.waitForAny(...waiters);
             if (event[1]) {
-                [resumeOk, resumeValue] = coroutine.resume(shellCoroutine, table.unpack(event, 1, event.n));
+                [resumeOk, resumeValue] = coroutine.resume(
+                    shellCoroutine,
+                    table.unpack(event, 1, event.n),
+                );
             }
         }
         if (!resumeOk) runtimeError = resumeValue as string;
@@ -283,32 +369,68 @@ const [parallelOk, parallelError] = pcall(parallel.waitForAny,
             refreshTimerId = os.startTimer(0.05);
             let timerId: number;
             do {
-                [, timerId] = os.pullEventRaw("timer") as LuaMultiReturn<[string, number]>;
+                [, timerId] = os.pullEventRaw("timer") as LuaMultiReturn<
+                    [string, number]
+                >;
             } while (timerId !== refreshTimerId);
         }
     },
     () => {
         while (true) {
-            const [eventName, peripheralName] = os.pullEventRaw() as LuaMultiReturn<[string, string]>;
-            const peripheralType = peripheral.getType(peripheralName) as unknown as string;
-            if (eventName === "peripheral" && peripheralType === "monitor" && !monitorsByName[peripheralName]) {
-                const [width, height] = basePeripheralCall(peripheralName, "getSize") as LuaMultiReturn<[number, number]>;
-                monitorsByName[peripheralName] = createMonitorWindow(peripheralName, width, height, nextMonitorId);
+            const [eventName, peripheralName] =
+                os.pullEventRaw() as LuaMultiReturn<[string, string]>;
+            const peripheralType = peripheral.getType(
+                peripheralName,
+            ) as unknown as string;
+            if (
+                eventName === "peripheral" &&
+                peripheralType === "monitor" &&
+                !monitorsByName[peripheralName]
+            ) {
+                const [width, height] = basePeripheralCall(
+                    peripheralName,
+                    "getSize",
+                ) as LuaMultiReturn<[number, number]>;
+                monitorsByName[peripheralName] = createMonitorWindow(
+                    peripheralName,
+                    width,
+                    height,
+                    nextMonitorId,
+                );
                 nextMonitorId += 1;
-            } else if (eventName === "peripheral_detach" && monitorsByName[peripheralName]) {
+            } else if (
+                eventName === "peripheral_detach" &&
+                monitorsByName[peripheralName]
+            ) {
                 monitorsByName[peripheralName].window.close();
-                delete (monitorsByName as Record<string, MonitorEntry | undefined>)[peripheralName];
+                delete (
+                    monitorsByName as Record<string, MonitorEntry | undefined>
+                )[peripheralName];
             } else if (eventName === "term_resize") {
                 const [width, height] = term.getSize();
                 mainWindow.reposition(undefined, undefined, width, height);
-            } else if (eventName === "monitor_resize" && monitorsByName[peripheralName]) {
-                const [width, height] = basePeripheralCall(peripheralName, "getSize") as LuaMultiReturn<[number, number]>;
-                monitorsByName[peripheralName].window.reposition(undefined, undefined, width, height);
-            } else if (eventName === "websocket_closed" && peripheralName === REMOTE_WS_BASE_URL + serverId) {
+            } else if (
+                eventName === "monitor_resize" &&
+                monitorsByName[peripheralName]
+            ) {
+                const [width, height] = basePeripheralCall(
+                    peripheralName,
+                    "getSize",
+                ) as LuaMultiReturn<[number, number]>;
+                monitorsByName[peripheralName].window.reposition(
+                    undefined,
+                    undefined,
+                    width,
+                    height,
+                );
+            } else if (
+                eventName === "websocket_closed" &&
+                peripheralName === REMOTE_WS_BASE_URL + serverId
+            ) {
                 isConnected = false;
             }
         }
-    }
+    },
 );
 if (!parallelOk) {
     runtimeError = parallelError as string;

@@ -118,3 +118,5 @@ const keymap = [
 ];
 
 const keymap_rev = Object.fromEntries(keymap.map((key, index) => [key, index]));
+
+const luaDebug = debug;

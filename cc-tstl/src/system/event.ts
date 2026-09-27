@@ -1,7 +1,7 @@
 // You may comment out any events you don't need to save space. Make sure to
 // delete them from eventInitializers as well.
 // import { running } from "../main";
-import { log } from "../lib/log";
+import * as log from "../lib/log";
 import { z, type Schema } from "../lib/zod-lite";
 import type { MetricsData, ResourceMetrics } from "../metrics";
 
@@ -493,7 +493,10 @@ export namespace Events {
             return [this.handle === undefined ? this.error : this.handle];
         }
         public static init(args: unknown[]) {
-            const [name, url, value] = parseEventArgs(args, websocketArgsSchema);
+            const [name, url, value] = parseEventArgs(
+                args,
+                websocketArgsSchema,
+            );
             let ev = new WebSocketConnect();
             ev.url = url;
             if (name == "websocket_success") {
@@ -734,7 +737,9 @@ export namespace Events {
         }
     }
 
-    export type EventToClass = {[k in EventType]: ReturnType<typeof eventInitializers[k]>}
+    export type EventToClass = {
+        [k in EventType]: ReturnType<(typeof eventInitializers)[k]>;
+    };
     const eventInitializers = {
         char: Char.init,
         key: Key.init,
@@ -770,10 +775,7 @@ export namespace Events {
         speaker_audio_empty: SpeakerAudioEmpty.init,
         computer_command: ComputerCommand.init,
         yield: Yield.init,
-    } satisfies Record<
-        EventType,
-        (args: unknown[]) => Event | undefined
-    >;
+    } satisfies Record<EventType, (args: unknown[]) => Event | undefined>;
 
     export function pullEventRaw<T extends EventType>(
         filter: T,

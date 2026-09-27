@@ -1,8 +1,8 @@
 import { Application } from "./Application";
-import { log, LogLevel } from "./lib/log";
+import * as log from "./lib/log";
 import { Threads } from "./system/threads";
 
-log.setLevel(LogLevel.DEBUG);
+log.setLogLevel(log.LogLevel.DEBUG);
 
 const ctrlCListenerThread = Threads.createThread(
     () => {

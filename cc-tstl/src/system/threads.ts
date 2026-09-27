@@ -1,4 +1,4 @@
-import { log } from "../lib/log";
+import * as log from "../lib/log";
 import { z } from "../lib/zod-lite";
 import { Events } from "./event";
 

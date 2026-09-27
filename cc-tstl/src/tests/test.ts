@@ -1,4 +1,4 @@
-import { log } from "../lib/log";
+import * as log from "../lib/log";
 import { verifyVersion } from "../lib/utils";
 
 const REMOTE_BASE_URL = "http://localhost:8080";
@@ -24,7 +24,11 @@ class HelloService {
         );
         if (valid_response === undefined) {
             if (response !== undefined) {
-                log.debug("greet response code", "code", response.getResponseCode());
+                log.debug(
+                    "greet response code",
+                    "code",
+                    response.getResponseCode(),
+                );
                 log.debug(
                     "greet response headers",
                     "headers",

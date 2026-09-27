@@ -1,4 +1,4 @@
-import { log } from "./lib/log";
+import * as log from "./lib/log";
 import { WebsocketConnection } from "./services/WebsocketConnection";
 import { Threads } from "./system/threads";
 

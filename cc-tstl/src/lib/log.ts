@@ -1,4 +1,18 @@
-export type LogAttrValue = string | number | boolean | undefined | object | unknown;
+export type LogAttrValue =
+    | string
+    | number
+    | boolean
+    | undefined
+    | object
+    | unknown;
+
+export type Log = {
+    // UTC milliseconds
+    time: number;
+    level: LogLevel;
+    message: string;
+    attrs: Record<string, LogAttrValue>;
+};
 
 export enum LogLevel {
     TRACE = -8,
@@ -10,6 +24,11 @@ export enum LogLevel {
 
 // Logging configuration
 export let LOG_LEVEL: LogLevel = LogLevel.DEBUG;
+const consumers: ((log: Log) => void)[] = [];
+
+export function addConsumer(consumer: (log: Log) => void) {
+    consumers.push(consumer);
+}
 
 const levelNames: Record<LogLevel, string> = {
     [LogLevel.TRACE]: "TRACE",
@@ -19,14 +38,12 @@ const levelNames: Record<LogLevel, string> = {
     [LogLevel.ERROR]: "ERROR",
 };
 
-const luaDebug = debug;
-
 type CallerInfo = ReturnType<typeof luaDebug.getinfo> & {
     calculatedLine?: number;
     calculatedFile?: string;
 };
 
-function setLogLevel(level: LogLevel): void {
+export function setLogLevel(level: LogLevel): void {
     LOG_LEVEL = level;
 }
 
@@ -72,7 +89,7 @@ const stripProjectRoot = (path: string): string => {
 };
 
 const normalizeSourcePath = (path: string): string => {
-    return stripProjectRoot(toTsPath(stripLuaSourcePrefix(path)));
+    return stripProjectRoot(stripLuaSourcePrefix(path));
 };
 
 const isUsableSourcePath = (path: string | undefined): boolean => {
@@ -103,10 +120,7 @@ const resolveCallerFrame = (
 
     const sourcemap = _G.__TS__sourcemap;
     if (line && sourcemap) {
-        const lookupKeys = [
-            file,
-            stripLuaSourcePrefix(info.short_src ?? ""),
-        ];
+        const lookupKeys = [file, stripLuaSourcePrefix(info.short_src ?? "")];
         let fileMap: Record<string, unknown> | undefined;
         for (const key of lookupKeys) {
             if (isUsableSourcePath(key) && sourcemap[key]) {
@@ -129,17 +143,9 @@ const resolveCallerFrame = (
                     const mapped = tsLine as { line: number; file?: string };
                     line = mapped.line;
                     file = mapped.file ?? toTsPath(file);
-                } else {
-                    file = toTsPath(file);
                 }
-            } else {
-                file = toTsPath(file);
             }
-        } else {
-            file = toTsPath(file);
         }
-    } else {
-        file = toTsPath(file);
     }
 
     return {
@@ -250,21 +256,9 @@ const collectAttrs = (
     return attrs;
 };
 
-const formatTimestamp = (): string => {
-    return tostring(os.date("!%Y-%m-%dT%H:%M:%SZ"));
-};
-
-const formatMessage = (message: LogAttrValue): string => {
-    return serializeLogValue(message);
-};
-
-const formatLogRecord = (
-    level: LogLevel,
-    message: string,
-    attrs: Record<string, LogAttrValue>,
-): string => {
+const formatLogRecord = ({ time, level, message, attrs }: Log): string => {
     const parts = [
-        `time=${formatTimestamp()}`,
+        `time=${os.date("!%Y-%m-%dT%H:%M:%SZ", time / 1000)}`,
         `level=${levelNames[level]}`,
         `msg=${formatAttrValue(message)}`,
     ];
@@ -278,60 +272,51 @@ const formatLogRecord = (
 
 const logInternal = (
     level: LogLevel,
-    message: LogAttrValue,
-    loggerName?: string,
+    message: string,
     boundAttrs: Record<string, LogAttrValue> = {},
     pairs: LogAttrValue[] = [],
 ) => {
     if (!shouldLog(level)) return;
-
-    const attrs = collectAttrs(boundAttrs, pairs);
-    if (loggerName !== undefined) {
-        attrs.logger = loggerName;
-    }
+    const log: Log = {
+        time: os.epoch("utc"),
+        level,
+        message,
+        attrs: collectAttrs(boundAttrs, pairs),
+    };
 
     const source = formatSource(getCallerInfo());
     if (source !== undefined) {
-        attrs.source = source;
+        log.attrs.source = source;
     }
 
-    print(formatLogRecord(level, formatMessage(message), attrs));
+    print(formatLogRecord(log));
 };
 
 export class Logger {
-    public readonly name?: string;
     private readonly boundAttrs: Record<string, LogAttrValue>;
 
-    constructor(name?: string, boundAttrs: Record<string, LogAttrValue> = {}) {
-        this.name = name;
+    constructor(boundAttrs: Record<string, LogAttrValue> = {}) {
         this.boundAttrs = boundAttrs;
     }
 
-    public with(key: string, value: LogAttrValue): Logger {
-        return new Logger(this.name, {
-            ...this.boundAttrs,
-            [key]: value,
-        });
+    public trace(message: string, ...attrs: LogAttrValue[]) {
+        logInternal(LogLevel.TRACE, message, this.boundAttrs, attrs);
     }
 
-    public trace(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        logInternal(LogLevel.TRACE, message, this.name, this.boundAttrs, attrs);
+    public debug(message: string, ...attrs: LogAttrValue[]) {
+        logInternal(LogLevel.DEBUG, message, this.boundAttrs, attrs);
     }
 
-    public debug(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        logInternal(LogLevel.DEBUG, message, this.name, this.boundAttrs, attrs);
+    public info(message: string, ...attrs: LogAttrValue[]) {
+        logInternal(LogLevel.INFO, message, this.boundAttrs, attrs);
     }
 
-    public info(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        logInternal(LogLevel.INFO, message, this.name, this.boundAttrs, attrs);
+    public warn(message: string, ...attrs: LogAttrValue[]) {
+        logInternal(LogLevel.WARN, message, this.boundAttrs, attrs);
     }
 
-    public warn(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        logInternal(LogLevel.WARN, message, this.name, this.boundAttrs, attrs);
-    }
-
-    public error(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        logInternal(LogLevel.ERROR, message, this.name, this.boundAttrs, attrs);
+    public error(message: string, ...attrs: LogAttrValue[]) {
+        logInternal(LogLevel.ERROR, message, this.boundAttrs, attrs);
     }
 }
 
@@ -345,24 +330,22 @@ export function getDefault(): Logger {
     return defaultLogger;
 }
 
-export const log = {
-    setLevel: setLogLevel,
-    trace(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        defaultLogger.trace(message, ...attrs);
-    },
-    debug(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        defaultLogger.debug(message, ...attrs);
-    },
-    info(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        defaultLogger.info(message, ...attrs);
-    },
-    warn(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        defaultLogger.warn(message, ...attrs);
-    },
-    error(message: LogAttrValue, ...attrs: LogAttrValue[]) {
-        defaultLogger.error(message, ...attrs);
-    },
-    withComponent(component: string): Logger {
-        return getDefault().with("component", component);
-    },
-};
+export function trace(message: string, ...attrs: LogAttrValue[]) {
+    defaultLogger.trace(message, ...attrs);
+}
+
+export function debug(message: string, ...attrs: LogAttrValue[]) {
+    defaultLogger.debug(message, ...attrs);
+}
+
+export function info(message: string, ...attrs: LogAttrValue[]) {
+    defaultLogger.info(message, ...attrs);
+}
+
+export function warn(message: string, ...attrs: LogAttrValue[]) {
+    defaultLogger.warn(message, ...attrs);
+}
+
+export function error(message: string, ...attrs: LogAttrValue[]) {
+    defaultLogger.error(message, ...attrs);
+}

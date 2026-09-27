@@ -1,4 +1,4 @@
-import { log } from "./log";
+import * as log from "./log";
 
 declare const _CC_VERSION: string | undefined;
 
@@ -17,10 +17,22 @@ function requireMinVersion(minVersion: string): void {
     let version: string | undefined;
     if (_CC_VERSION) {
         version = _CC_VERSION;
-        log.debug("resolved version", "source", "_CC_VERSION", "version", version);
+        log.debug(
+            "resolved version",
+            "source",
+            "_CC_VERSION",
+            "version",
+            version,
+        );
     } else if (!_HOST) {
         version = string.gsub(os.version(), "CraftOS ", "")[0];
-        log.debug("resolved version", "source", "os.version", "version", version);
+        log.debug(
+            "resolved version",
+            "source",
+            "os.version",
+            "version",
+            version,
+        );
     } else {
         version = string.match(_HOST, "ComputerCraft ([0-9%.]+)")[0];
         log.debug("resolved version", "source", "_HOST", "version", version);
