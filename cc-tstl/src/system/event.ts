@@ -239,6 +239,9 @@ export namespace Events {
             let ev = new Terminate();
             return ev;
         }
+        public static emit() {
+            os.queueEvent("terminate");
+        }
     }
 
     const diskArgsSchema = z.union([

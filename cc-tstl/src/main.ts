@@ -1,5 +1,6 @@
 import { Application } from "./Application";
 import * as log from "./lib/log";
+import { Events } from "./system/event";
 import { Threads } from "./system/threads";
 
 log.setLogLevel(log.LogLevel.DEBUG);
@@ -18,6 +19,10 @@ const ctrlCListenerThread = Threads.createThread(
 
         while (ctrlDown === false || cDown === false) {
             const keyEvent = Threads.pullEvent(["key_up", "key"]);
+            if (keyEvent instanceof Events.Terminate) {
+                log.debug("terminating Ctrl+C watcher thread");
+                return;
+            }
             if (keyEvent.key === keys.leftCtrl) {
                 ctrlDown = !keyEvent.isUp;
             } else if (keyEvent.key === keys.c) {
@@ -25,9 +30,12 @@ const ctrlCListenerThread = Threads.createThread(
             }
         }
         log.info("Ctrl+C triggered exiting program...");
-        Threads.stopScheduler();
+        Threads.dangerouslyForceStopScheduler();
     },
-    { priority: Threads.Priority.HIGHEST, blocking: false },
+    {
+        priority: Threads.Priority.HIGHEST,
+        shutdownRank: Threads.ShutdownRank.WATCH,
+    },
 );
 
 ctrlCListenerThread.start();

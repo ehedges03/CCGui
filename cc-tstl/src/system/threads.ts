@@ -3,7 +3,8 @@ import { z } from "../lib/zod-lite";
 import { Events } from "./event";
 
 export namespace Threads {
-    let forceQuitted = false;
+    let running = false;
+    let stopping = false;
     let currentThread: ThreadInternal | undefined = undefined;
     const threads: Set<ThreadInternal> = new Set();
     let yieldEventEmitted: boolean = false;
@@ -40,11 +41,17 @@ export namespace Threads {
         public abstract setPriority(priority: number): void;
     }
 
+    export enum ShutdownRank {
+        WATCH = 0,
+        CONNECTION = 1,
+        SINK = 2,
+        APP = 3,
+    }
+
     type ThreadOptions = {
         priority?: Priority;
         debugId?: string;
-        // Whether or not this threads existence should block application closure (default: true)
-        blocking?: boolean;
+        shutdownRank?: ShutdownRank;
     };
 
     let nextDebugId = 0;
@@ -55,14 +62,14 @@ export namespace Threads {
         public runnable: Runnable;
         public luaThread: LuaThread | undefined;
         public initialized = false;
-        public blocking;
+        public shutdownRank: ShutdownRank;
         public readonly children: ThreadInternal[] = [];
 
         constructor(runnable: Runnable, options?: ThreadOptions) {
             this.runnable = runnable;
             this.priority = options?.priority ?? Priority.DEFAULT;
             this.debugId = options?.debugId ?? tostring(nextDebugId++);
-            this.blocking = options?.blocking ?? true;
+            this.shutdownRank = options?.shutdownRank ?? ShutdownRank.APP;
         }
 
         public start() {
@@ -170,18 +177,27 @@ export namespace Threads {
         return thread;
     }
 
-    export function sleep(timeout: number = 0) {
+    export function sleep(timeout: number = 0): Events.Terminate | undefined {
         const id = os.startTimer(timeout);
-        while (pullEvent(["timer"]).id !== id) {}
+        let event: Events.Terminate | Events.Timer;
+        do {
+            event = pullEvent(["timer", "terminate"]);
+            if (event instanceof Events.Terminate) {
+                return event;
+            }
+        } while (event.id !== id);
     }
 
     // @ts-ignore
-    export function yield() {
+    export function yield(): Events.Terminate | undefined {
         if (!yieldEventEmitted) {
             Events.Yield.emit();
             yieldEventEmitted = true;
         }
-        pullEvent(["yield"]);
+        const event = pullEvent(["yield", "terminate"]);
+        if (event instanceof Events.Terminate) {
+            return event;
+        }
     }
 
     export function pullAnyEvent(): Events.Event {
@@ -192,7 +208,7 @@ export namespace Threads {
         return event;
     }
 
-    export function pullEvent<T extends Events.EventType[]>(
+    export function pullEvent<T extends readonly Events.EventType[]>(
         events: T,
     ): Events.EventToClass[T[number]] {
         let event: Events.Event | undefined;
@@ -214,7 +230,8 @@ export namespace Threads {
     }
 
     export function run() {
-        while (!forceQuitted) {
+        running = true;
+        while (running) {
             let threadsToInitialize: ThreadInternal[] = [];
             do {
                 threadsToInitialize = [];
@@ -233,33 +250,63 @@ export namespace Threads {
                 }
             } while (threadsToInitialize.length !== 0);
 
+            if (stopping) {
+                Events.Terminate.emit();
+            }
             const event = Events.pullEventRaw();
             log.trace("pulled event", "event", event.get_name());
             if (event instanceof Events.Yield) {
                 yieldEventEmitted = false;
             }
 
-            log.trace("resuming threads", "count", threads.size);
-            for (const thread of [...threads].sort(
-                (a, b) => b.priority - a.priority,
-            )) {
-                thread.resume(event);
-            }
-            let blockingThreadsRemain = false;
-            for (const thread of threads) {
-                if (thread.blocking) {
-                    blockingThreadsRemain = true;
-                    break;
+            if (event instanceof Events.Terminate) {
+                stopping = true;
+                let highestRank: ShutdownRank = ShutdownRank.WATCH;
+                let highestRankThreads: ThreadInternal[] = [];
+
+                for (const thread of threads) {
+                    if (thread.shutdownRank > highestRank) {
+                        highestRankThreads = [];
+                        highestRank = thread.shutdownRank;
+                    }
+                    if (thread.shutdownRank === highestRank) {
+                        highestRankThreads.push(thread);
+                    }
+                }
+
+                log.trace(
+                    "terminating threads",
+                    "rank",
+                    highestRank,
+                    "count",
+                    highestRankThreads.length,
+                );
+                for (const thread of [...highestRankThreads].sort(
+                    (a, b) => b.priority - a.priority,
+                )) {
+                    thread.resume(event);
+                }
+            } else {
+                log.trace("resuming threads", "count", threads.size);
+                for (const thread of [...threads].sort(
+                    (a, b) => b.priority - a.priority,
+                )) {
+                    thread.resume(event);
                 }
             }
-            if (!blockingThreadsRemain) {
+
+            if (threads.size === 0) {
                 log.info("no more threads to run, exiting");
-                break;
+                running = false;
             }
         }
     }
 
-    export function stopScheduler() {
-        forceQuitted = true;
+    export function stop() {
+        stopping = true;
+    }
+
+    export function dangerouslyForceStopScheduler() {
+        running = false;
     }
 }
