@@ -1,9 +1,10 @@
 version: v2
+clean: true
 plugins:
-  - remote: buf.build/protocolbuffers/go
+  - remote: buf.build/protocolbuffers/go:v1.36.11
     out: backend/gen
     opt: paths=source_relative
-  - remote: buf.build/connectrpc/go
+  - remote: buf.build/connectrpc/go:v1.19.1
     out: backend/gen
     opt: paths=source_relative
   - remote: buf.build/bufbuild/es:v1.10.0
@@ -11,6 +12,16 @@ plugins:
     opt: target=ts,import_extension=.ts
     include_imports: true
     include_wkt: true
-  - remote: buf.build/connectrpc/es
+  - remote: buf.build/connectrpc/es:v1.6.1
     out: frontend/src/gen
     opt: target=ts,import_extension=.ts
+  - remote: buf.build/community/stephenh-ts-proto:v2.18.1
+    out: cc-tstl/src/gen
+    opt:
+      - onlyTypes=true
+      - useOptionals=all
+      - stringEnums=true
+      - forceLong=string
+      - outputServices=default
+      - outputServices=generic-definitions
+

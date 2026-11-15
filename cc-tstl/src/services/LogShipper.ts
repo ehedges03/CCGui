@@ -1,27 +1,20 @@
+import { LogEntry, LogServiceDefinition } from "../gen/log/v1/log";
 import * as log from "../lib/log";
 import { Threads } from "../system/threads";
-import { ApiClient } from "./ApiClient";
+import { ApiClient, ServiceClient } from "./ApiClient";
 
 // Seconds between flushes
 const FLUSH_RATE = 5;
 // Oldest entries are dropped beyond this many buffered logs
 const MAX_BUFFERED = 500;
 
-// JSON shape of log.v1.LogEntry
-type LogEntry = {
-    timeUnixMs: number;
-    level: number;
-    message: string;
-    attrs: Record<string, string>;
-};
-
 export class LogShipper {
-    private readonly api: ApiClient;
+    private readonly logService: ServiceClient<typeof LogServiceDefinition>;
     private readonly logger = new log.Logger({ component: "LogShipper" });
     private buffer: LogEntry[] = [];
 
     constructor(api: ApiClient) {
-        this.api = api;
+        this.logService = new ServiceClient(api, LogServiceDefinition);
     }
 
     // Runs inside every log call, so it must not log or yield.
@@ -31,7 +24,7 @@ export class LogShipper {
             attrs[key] = log.serializeLogValue(value);
         }
         this.buffer.push({
-            timeUnixMs: entry.time,
+            timeUnixMs: tostring(entry.time),
             level: entry.level,
             message: entry.message,
             attrs,
@@ -67,7 +60,7 @@ export class LogShipper {
         }
         const entries = this.buffer;
         this.buffer = [];
-        const result = this.api.call("log.v1.LogService/ShipLogs", { entries });
+        const result = this.logService.call("shipLogs", { entries });
         if (!result.success) {
             // Requeue ahead of anything logged during the call.
             this.buffer = [...entries, ...this.buffer];

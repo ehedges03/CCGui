@@ -48,3 +48,41 @@ export class ApiClient {
         };
     }
 }
+
+/**
+ * Shape of a ts-proto generic service definition.
+ */
+type ServiceDefinition = {
+    readonly fullName: string;
+    readonly methods: {
+        readonly [key: string]: {
+            readonly name: string;
+            readonly requestType: unknown;
+            readonly responseType: unknown;
+        };
+    };
+};
+
+/**
+ * Typed wrapper over ApiClient for one generated service definition.
+ */
+export class ServiceClient<D extends ServiceDefinition> {
+    private readonly api: ApiClient;
+    private readonly definition: D;
+
+    constructor(api: ApiClient, definition: D) {
+        this.api = api;
+        this.definition = definition;
+    }
+
+    public call<M extends keyof D["methods"] & string>(
+        method: M,
+        request: D["methods"][M]["requestType"],
+    ): ApiResult<D["methods"][M]["responseType"]> {
+        const { name } = this.definition.methods[method];
+        return this.api.call(
+            `${this.definition.fullName}/${name}`,
+            request as object,
+        );
+    }
+}

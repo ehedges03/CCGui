@@ -21,3 +21,4 @@ frontend/src/gen/
 node_modules/
 pkg/
 .volumes/
+cc-tstl/src/gen/

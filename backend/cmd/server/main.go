@@ -11,7 +11,6 @@ import (
 
 	"connectrpc.com/connect"
 	"ehedges.net/ccgui/backend/gen/auth/v1/authv1connect"
-	"ehedges.net/ccgui/backend/gen/hello/v1/hellov1connect"
 	"ehedges.net/ccgui/backend/gen/log/v1/logv1connect"
 	"ehedges.net/ccgui/backend/internal/controller"
 	"ehedges.net/ccgui/backend/internal/repository"
@@ -59,8 +58,6 @@ func main() {
 		}
 	}()
 	mux.HandleFunc("/ws", wsHub.HandleWS)
-	path, connectHandler := hellov1connect.NewHelloServiceHandler(&controller.HelloController{})
-	mux.Handle(path, connectHandler)
 	authController := controller.NewAuthController(apiKeyService)
 	authHandlerPath, authHandler := authv1connect.NewAuthServiceHandler(authController)
 	mux.Handle(authHandlerPath, authHandler)
