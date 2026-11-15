@@ -1,10 +1,5 @@
 export type LogAttrValue =
-    | string
-    | number
-    | boolean
-    | undefined
-    | object
-    | unknown;
+    string | number | boolean | undefined | object | unknown;
 
 export type Log = {
     // UTC milliseconds

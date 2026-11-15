@@ -6,14 +6,17 @@
   "main": "main.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "node scripts/clean-outdir.mjs && tstl"
+    "build": "node scripts/clean-outdir.mjs && tstl",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "typescript": "^5.1.0",
+    "@jackmacwindows/cc-types": "file:types/cc",
+    "@jackmacwindows/craftos-types": "file:types/craftos",
     "@jackmacwindows/lua-types": "^2.13.2",
     "@jackmacwindows/typescript-to-lua": "^1.22.0",
-    "@jackmacwindows/craftos-types": "file:types/craftos",
-    "@jackmacwindows/cc-types": "file:types/cc"
+    "prettier": "3.10.1",
+    "typescript": "^5.1.0"
   },
   "author": "JackMacWindows",
   "license": "MIT"

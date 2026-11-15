@@ -336,14 +336,11 @@ const [parallelOk, parallelError] = pcall(
             waiters.push(() => {
                 while (true) {
                     event = packEvent(os.pullEventRaw(eventFilter));
-                    if (
-                        !(
-                            (event[1] === "websocket_message" &&
-                                event[2] === REMOTE_WS_BASE_URL + serverId) ||
-                            (event[1] === "timer" &&
-                                event[2] === refreshTimerId)
-                        )
-                    ) {
+                    if (!(
+                        (event[1] === "websocket_message" &&
+                            event[2] === REMOTE_WS_BASE_URL + serverId) ||
+                        (event[1] === "timer" && event[2] === refreshTimerId)
+                    )) {
                         break;
                     }
                 }

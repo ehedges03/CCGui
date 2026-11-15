@@ -6,7 +6,8 @@
  */
 
 export type MessagePackStringMode = "string_compat" | "string" | "binary";
-export type MessagePackArrayMode = "without_hole" | "with_hole" | "always_as_map";
+export type MessagePackArrayMode =
+    "without_hole" | "with_hole" | "always_as_map";
 export type MessagePackIntegerMode = "unsigned" | "signed";
 export type MessagePackNumberMode = "float" | "double";
 
@@ -18,7 +19,11 @@ export interface MessagePackCursor {
 }
 
 export type MessagePackPacker = (buffer: string[], ...args: unknown[]) => void;
-export type MessagePackExtPacker = (buffer: string[], tag: number, data: string) => void;
+export type MessagePackExtPacker = (
+    buffer: string[],
+    tag: number,
+    data: string,
+) => void;
 
 export interface MessagePackPackers {
     [name: string]: MessagePackPacker | MessagePackExtPacker;
@@ -56,9 +61,11 @@ export function unpack_cursor(cursor: MessagePackCursor): unknown;
 export function build_ext(tag: number, data: string): unknown;
 export function unpack(data: string): unknown;
 
-export function unpacker(src: string): () => LuaMultiReturn<[number, unknown] | []>;
 export function unpacker(
-    src: () => string | undefined
+    src: string,
+): () => LuaMultiReturn<[number, unknown] | []>;
+export function unpacker(
+    src: () => string | undefined,
 ): () => LuaMultiReturn<[true, unknown] | []>;
 
 export let sentinel: unknown;

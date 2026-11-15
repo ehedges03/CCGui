@@ -116,4 +116,4 @@ export function App() {
   return <ComponentExample />;
 }
 
-export default App
+export default App;

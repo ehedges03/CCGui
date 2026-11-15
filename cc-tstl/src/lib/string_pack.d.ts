@@ -20,5 +20,5 @@ export function packsize(fmt: string): number;
 export function unpack(
     fmt: string,
     str: string,
-    pos?: number
+    pos?: number,
 ): LuaMultiReturn<[...unknown[], number]>;

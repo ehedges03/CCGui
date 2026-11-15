@@ -8,13 +8,18 @@ const ts = require("typescript");
 const configPath = process.env.TSCONFIG ?? "tsconfig.json";
 const absoluteConfigPath = path.resolve(process.cwd(), configPath);
 
-const { config, error } = ts.readConfigFile(absoluteConfigPath, ts.sys.readFile);
+const { config, error } = ts.readConfigFile(
+    absoluteConfigPath,
+    ts.sys.readFile,
+);
 if (error) {
-    console.error(ts.formatDiagnosticsWithColorAndContext([error], {
-        getCurrentDirectory: ts.sys.getCurrentDirectory,
-        getCanonicalFileName: (fileName) => fileName,
-        getNewLine: () => ts.sys.newLine,
-    }));
+    console.error(
+        ts.formatDiagnosticsWithColorAndContext([error], {
+            getCurrentDirectory: ts.sys.getCurrentDirectory,
+            getCanonicalFileName: (fileName) => fileName,
+            getNewLine: () => ts.sys.newLine,
+        }),
+    );
     process.exit(1);
 }
 

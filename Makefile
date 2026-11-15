@@ -1,4 +1,4 @@
-.PHONY: all gen backend cc
+.PHONY: all gen backend cc format format-check
 
 # Sequential on purpose: `make -j` would otherwise build before gen finishes.
 all:
@@ -16,3 +16,9 @@ backend:
 
 cc:
 	cd cc-tstl && yarn build
+
+# gofmt skips backend/gen (generated) and backend/vendor (third-party).
+format:
+	cd cc-tstl && yarn format
+	cd frontend && yarn format
+	cd backend && gofmt -w cmd internal

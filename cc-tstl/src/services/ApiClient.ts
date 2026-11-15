@@ -39,8 +39,7 @@ export class ApiClient {
         }
         // Connect error bodies are {"code": "...", "message": "..."}
         const err = textutils.unserializeJSON(text) as
-            | { code?: string; message?: string }
-            | undefined;
+            { code?: string; message?: string } | undefined;
         return {
             success: false,
             code: err?.code ?? "unavailable",

@@ -7,7 +7,11 @@
         "rootDir": "src",
         "outDir": "/home/ehedges/.local/share/craftos-pc/computer/0/cc-tstl",
         "strict": true,
-        "types": ["@jackmacwindows/lua-types/cc-5.2", "@jackmacwindows/craftos-types", "@jackmacwindows/cc-types"]
+        "types": [
+            "@jackmacwindows/lua-types/cc-5.2",
+            "@jackmacwindows/craftos-types",
+            "@jackmacwindows/cc-types"
+        ]
     },
     "tstl": {
         "luaTarget": "CC-5.2",
@@ -18,8 +22,5 @@
         "sourceMapTraceback": true,
         "noHeader": true
     },
-    "include": [
-        "src/**/*.ts",
-        "src/**/*.d.ts"
-    ]
+    "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

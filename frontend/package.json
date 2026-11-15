@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@base-ui/react": "^1.1.0",
     "@bufbuild/protobuf": "^1.10.0",
     "@connectrpc/connect": "^1.7.0",
     "@connectrpc/connect-web": "^1.7.0",
-    "@base-ui/react": "^1.1.0",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@tabler/icons-react": "^3.36.1",
     "@tailwindcss/vite": "^4.1.17",
@@ -37,6 +39,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "prettier": "3.10.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"

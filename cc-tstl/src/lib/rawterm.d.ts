@@ -18,9 +18,18 @@ export interface RawtermClientDelegate extends RawtermDelegate {
     /** Update the local window title. */
     setTitle?(title: string): void;
     /** Show a message on the client UI. */
-    showMessage?(type: RawtermMessageType | undefined, title: string, message: string): void;
+    showMessage?(
+        type: RawtermMessageType | undefined,
+        title: string,
+        message: string,
+    ): void;
     /** Notification for unknown window IDs. */
-    windowNotification?(id: number, width: number, height: number, title: string): void;
+    windowNotification?(
+        id: number,
+        width: number,
+        height: number,
+        title: string,
+    ): void;
 }
 
 /** Render target with terminal/window-style APIs. */
@@ -44,7 +53,13 @@ export interface RawtermRenderTarget {
     setPaletteColor?(color: number, r: number, g?: number, b?: number): void;
     getGraphicsMode?(): false | number;
     setGraphicsMode?(mode: boolean | number): void;
-    drawPixels?(x: number, y: number, pixels: string[] | number[][], width?: number, height?: number): void;
+    drawPixels?(
+        x: number,
+        y: number,
+        pixels: string[] | number[][],
+        width?: number,
+        height?: number,
+    ): void;
     getPosition?(): LuaMultiReturn<[number, number]>;
     reposition?(x?: number, y?: number, width?: number, height?: number): void;
     setVisible?(visible: boolean): void;
@@ -100,10 +115,16 @@ export interface RawtermServerWindow {
         y: number,
         pixels: number | string[] | number[][],
         width?: number,
-        height?: number
+        height?: number,
     ): void;
     /** Read pixel data. */
-    getPixels(x: number, y: number, width: number, height: number, asString?: boolean): string[] | number[][];
+    getPixels(
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+        asString?: boolean,
+    ): string[] | number[][];
     /** British spelling aliases. */
     isColour: RawtermServerWindow["isColor"];
     getTextColour: RawtermServerWindow["getTextColor"];
@@ -113,7 +134,9 @@ export interface RawtermServerWindow {
     getPaletteColour: RawtermServerWindow["getPaletteColor"];
     setPaletteColour: RawtermServerWindow["setPaletteColor"];
     /** Get a line of text and color data. */
-    getLine(line: number): LuaMultiReturn<[string, string, string] | [undefined]>;
+    getLine(
+        line: number,
+    ): LuaMultiReturn<[string, string, string] | [undefined]>;
     /** Check visibility. */
     isVisible(): boolean;
     /** Set visibility. */
@@ -125,13 +148,26 @@ export interface RawtermServerWindow {
     /** Get the window position. */
     getPosition(): LuaMultiReturn<[number, number]>;
     /** Reposition/resize window and optionally change parent. */
-    reposition(x?: number, y?: number, width?: number, height?: number, parent?: RawtermRenderTarget): void;
+    reposition(
+        x?: number,
+        y?: number,
+        width?: number,
+        height?: number,
+        parent?: RawtermRenderTarget,
+    ): void;
     /** Pull events, including raw input. */
-    pullEvent(filter?: string, ignoreLocalEvents?: boolean): LuaMultiReturn<[string, ...unknown[]]>;
+    pullEvent(
+        filter?: string,
+        ignoreLocalEvents?: boolean,
+    ): LuaMultiReturn<[string, ...unknown[]]>;
     /** Set window title and notify client. */
     setTitle(title: string): void;
     /** Send a message to the client. */
-    sendMessage(type: RawtermMessageType | undefined, title: string, message: string): void;
+    sendMessage(
+        type: RawtermMessageType | undefined,
+        title: string,
+        message: string,
+    ): void;
     /** Close the window connection. */
     close(): void;
 }
@@ -188,7 +224,13 @@ export interface RawtermFsHandle {
     copy(path: string, dest: string): void;
     move(path: string, dest: string): void;
     /** Open a file; returns handle or [undefined, error]. */
-    open(path: string, mode: string): RawtermReadHandle | RawtermWriteHandle | LuaMultiReturn<[undefined, string]>;
+    open(
+        path: string,
+        mode: string,
+    ):
+        | RawtermReadHandle
+        | RawtermWriteHandle
+        | LuaMultiReturn<[undefined, string]>;
 }
 
 /** Client handle returned by `rawterm.client`. */
@@ -217,19 +259,19 @@ export function server(
     parent?: RawtermRenderTarget,
     x?: number,
     y?: number,
-    blockFSAccess?: boolean
+    blockFSAccess?: boolean,
 ): RawtermServerWindow;
 
 /** Create a client handle that renders to a window. */
 export function client(
     delegate: RawtermClientDelegate,
     id: number,
-    window?: RawtermRenderTarget
+    window?: RawtermRenderTarget,
 ): RawtermClientHandle;
 
 /** Create a WebSocket delegate. */
 export function wsDelegate(
-    url: string
+    url: string,
 ): LuaMultiReturn<[RawtermDelegate | undefined, string | undefined]>;
 
 /** Create a rednet delegate. */
