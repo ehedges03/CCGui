@@ -11,7 +11,8 @@ const PING_RATE = 30;
 const MAX_RETRIES = 3;
 let nextConnectionId = 0;
 
-enum BASE_ROUTES {
+// Must match BaseRoute in backend/internal/websocket/base_router.go
+export enum BASE_ROUTES {
     PING = 0,
     PONG = 1,
 }
@@ -27,25 +28,27 @@ export type ConnectionStatus =
       }
     | {
           state: "stopped";
-          reason: "requested" | "exhausted" | "no_creds";
+          reason: "requested" | "no_creds";
       };
 
 export class WebsocketConnection {
     private static readonly RETRY_RATE = 10;
     private readonly connectionId = nextConnectionId++;
     private readonly logger: log.Logger;
+    private readonly listeners = new Map<number, Listener>();
 
     private status: ConnectionStatus = {
         state: "stopped",
         reason: "requested",
     };
-    private url: string | undefined;
-    private apiKey: string | undefined;
+    private readonly url: string;
+    private readonly apiKey: string;
 
     private websocket: WebSocket | undefined;
-    private lastPingPongTime: number = 0;
 
-    constructor() {
+    constructor(url: string, apiKey: string) {
+        this.url = url;
+        this.apiKey = apiKey;
         this.logger = new log.Logger({
             component: "WebsocketConnection",
             connectionId: this.connectionId,
@@ -57,14 +60,6 @@ export class WebsocketConnection {
         Events.WebSocketConnectionState.emit(this.connectionId, status.state);
     }
 
-    public setUrl(url: string) {
-        this.url = url;
-    }
-
-    public setCredentials(apiKey: string) {
-        this.apiKey = apiKey;
-    }
-
     public start() {
         if (this.websocket !== undefined) {
             this.setStatus({ state: "connected" });
@@ -74,19 +69,32 @@ export class WebsocketConnection {
         const pingingThread = Threads.createThread(
             () => {
                 while (this.status.state !== "stopped") {
-                    Threads.sleep(PING_RATE);
+                    if (Threads.sleep(PING_RATE) instanceof Events.Terminate) {
+                        this.logger.debug("ws pinging terminating");
+                        return;
+                    }
                     this.ping(0);
                 }
             },
-            { debugId: "ws_pinging" },
+            {
+                shutdownRank: Threads.ShutdownRank.CONNECTION,
+                debugId: "ws_pinging",
+            },
         );
         const connectionThread = Threads.createThread(
             () => {
                 while (this.status.state === "connecting") {
-                    this.connect();
+                    if (this.connect() instanceof Events.Terminate) {
+                        this.logger.debug("ws connecting terminating");
+                        return;
+                    }
                 }
             },
-            { priority: Threads.Priority.HIGHEST, debugId: "ws_connection" },
+            {
+                priority: Threads.Priority.HIGHEST,
+                shutdownRank: Threads.ShutdownRank.CONNECTION,
+                debugId: "ws_connection",
+            },
         );
         connectionThread.start();
         pingingThread.start();
@@ -101,22 +109,12 @@ export class WebsocketConnection {
         this.websocket.close();
     }
 
-    private connect(): boolean {
-        if (this.url === undefined || this.apiKey === undefined) {
-            this.setStatus({ state: "stopped", reason: "no_creds" });
-            return false;
-        }
-
+    private connect(): Events.Terminate | undefined {
         let attempts = 0;
         if (this.status.state === "connecting") {
             attempts = this.status.attempts;
         } else {
             this.setStatus({ state: "connecting", attempts });
-        }
-
-        if (attempts >= MAX_RETRIES) {
-            this.setStatus({ state: "stopped", reason: "exhausted" });
-            return false;
         }
 
         const headers = new LuaMap<string, string>();
@@ -126,6 +124,10 @@ export class WebsocketConnection {
             "websocket_success",
             "websocket_failure",
         ]);
+
+        if (event instanceof Events.Terminate) {
+            return event;
+        }
 
         this.logger.trace("websocket event", "event", event.get_name());
         if (event.get_name() === "websocket_success") {
@@ -143,10 +145,11 @@ export class WebsocketConnection {
                 "err",
                 event.error,
             );
-            Threads.sleep(WebsocketConnection.RETRY_RATE);
-            return false;
+            const sleepEvent = Threads.sleep(WebsocketConnection.RETRY_RATE);
+            if (event instanceof Events.Terminate) {
+                return event;
+            }
         }
-        return true;
     }
 
     private handle() {
@@ -157,6 +160,9 @@ export class WebsocketConnection {
                 "websocket_closed",
                 "websocket_message",
             ]);
+            if (event instanceof Events.Terminate) {
+                return;
+            }
             if (event.url !== this.url) {
                 continue;
             }
@@ -173,7 +179,6 @@ export class WebsocketConnection {
                 );
                 this.websocket.close();
                 this.websocket = undefined;
-                this.url = undefined;
                 break;
             }
         }
@@ -185,52 +190,62 @@ export class WebsocketConnection {
             this.logger.warn("received non-binary message, skipping");
             return;
         }
-        const data = unpack(message);
-        this.logger.debug("received websocket message", "data", data);
-    }
-
-    public send(message: any) {
-        if (this.status.state !== "connected") {
-            this.logger.error(
-                "websocket connection is stopped, unable to send message",
-            );
+        // Server pushes are msgpack [route, data]
+        const [route, data] = unpack(message) as [number, unknown];
+        if (route === BASE_ROUTES.PONG) {
+            this.logger.debug("received pong", "value", data);
             return;
         }
-
-        while (this.websocket === undefined) {
-            this.logger.warn(
-                "websocket not connected, unable to send message, retrying...",
-            );
-            Threads.yield();
+        const listener = this.listeners.get(route);
+        if (listener === undefined) {
+            this.logger.warn("no listener for websocket route", "route", route);
+            return;
         }
-        const data = pack(message);
-        this.logger.debug(
-            "sending websocket message",
-            "message",
-            message,
-            "pack_b64",
-            base64encode(data),
-        );
-        this.websocket.send(data, true);
+        listener(data);
     }
 
-    public getState(): ConnectionStatus["state"] {
-        return this.status.state;
+    /**
+     * Listen for server→client pushes on a route. The websocket is receive-only;
+     * client→server calls go through ApiClient.
+     */
+    public on(route: number, listener: Listener) {
+        this.listeners.set(route, listener);
+    }
+
+    public getStatus(): ConnectionStatus {
+        return this.status;
     }
 
     public isConnected(): boolean {
         return this.status.state === "connected";
     }
 
-    public waitForConnectionState(): "connected" | "stopped" {
+    public waitForStatusUpdate(): ConnectionStatus | Events.Terminate {
         while (this.status.state === "connecting") {
             const event = Threads.pullEvent(["websocket_connection_state"]);
+            if (event instanceof Events.Terminate) {
+                return event;
+            }
+            if (event.connectionId === this.connectionId) {
+                break;
+            }
+        }
+
+        return this.status;
+    }
+
+    public waitForConnection(): ConnectionStatus | Events.Terminate {
+        while (this.status.state === "connecting") {
+            const event = Threads.pullEvent(["websocket_connection_state"]);
+            if (event instanceof Events.Terminate) {
+                return event;
+            }
             if (event.connectionId !== this.connectionId) {
                 continue;
             }
         }
 
-        return this.status.state;
+        return this.status;
     }
 
     public ping(value: number) {

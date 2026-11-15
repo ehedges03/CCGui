@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package log.v1;
+
+option go_package = "ehedges.net/ccgui/backend/gen/log/v1;logv1";
+
+// LogService receives logs shipped from ComputerCraft clients.
+// Requires an API key: "Authorization: Bearer <key>".
+service LogService {
+  // ShipLogs ingests a batch of client log entries.
+  rpc ShipLogs(ShipLogsRequest) returns (ShipLogsResponse) {}
+}
+
+message LogEntry {
+  // Client time in UTC milliseconds since the epoch.
+  int64 time_unix_ms = 1;
+  // slog-compatible level: -8 trace, -4 debug, 0 info, 4 warn, 8 error.
+  int32 level = 2;
+  string message = 3;
+  map<string, string> attrs = 4;
+}
+
+message ShipLogsRequest {
+  repeated LogEntry entries = 1;
+}
+
+message ShipLogsResponse {}

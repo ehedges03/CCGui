@@ -207,7 +207,7 @@ const needsQuoting = (value: string): boolean => {
     );
 };
 
-const serializeLogValue = (value: LogAttrValue): string => {
+export const serializeLogValue = (value: LogAttrValue): string => {
     if (value === undefined) {
         return "";
     }
@@ -290,6 +290,9 @@ const logInternal = (
     }
 
     print(formatLogRecord(log));
+    for (const consumer of consumers) {
+        consumer(log);
+    }
 };
 
 export class Logger {

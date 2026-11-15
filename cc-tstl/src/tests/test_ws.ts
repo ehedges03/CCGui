@@ -9,10 +9,8 @@ const REMOTE_BASE_URL = "ws://localhost:8080/ws";
 verifyVersion();
 
 const testThread = Threads.createThread(() => {
-    const wsService = new WebsocketConnection();
-
-    wsService.setUrl(REMOTE_BASE_URL);
-    wsService.setCredentials(
+    const wsService = new WebsocketConnection(
+        REMOTE_BASE_URL,
         "oMAc62ccCb2iA29U0KpYlRqj9tN0aqLupIpc3cGYvHr0SwH-Vtk9-MA0as7hnLPYL_J4DCYLBQ7uBThywOxN0g",
     );
 
