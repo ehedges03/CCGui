@@ -1,0 +1,21 @@
+meta {
+  name: Greet
+  type: http
+  seq: 4
+}
+
+post {
+  url: http://localhost:8080/hello.v1.HelloService/Greet
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "World"
+  }
+}

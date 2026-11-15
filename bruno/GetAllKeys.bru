@@ -1,0 +1,19 @@
+meta {
+  name: GetAllKeys
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8080/auth.v1.AuthService/GetAllKeys
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {}
+}

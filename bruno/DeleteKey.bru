@@ -1,0 +1,21 @@
+meta {
+  name: DeleteKey
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8080/auth.v1.AuthService/DeleteKey
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "id": "paste-key-id-here"
+  }
+}
