@@ -13,11 +13,10 @@ import (
 	"ehedges.net/ccgui/backend/gen/auth/v1/authv1connect"
 	"ehedges.net/ccgui/backend/gen/log/v1/logv1connect"
 	"ehedges.net/ccgui/backend/internal/controller"
+	"ehedges.net/ccgui/backend/internal/db"
 	"ehedges.net/ccgui/backend/internal/repository"
 	"ehedges.net/ccgui/backend/internal/service"
 	"ehedges.net/ccgui/backend/internal/websocket"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -36,13 +35,10 @@ func main() {
 		slog.Error("failed to create data directory", "err", err)
 		return
 	}
-	db, err := gorm.Open(sqlite.Open("data/ccgui.db"), &gorm.Config{})
+	// DSN params apply to every pooled connection (a one-off PRAGMA would not).
+	// WAL + busy_timeout let log ingestion and token rotation write concurrently.
+	db, err := db.OpenSqliteDB("data/ccgui.db")
 	if err != nil {
-		slog.Error("failed to open database", "err", err)
-		return
-	}
-	if err := repository.AutoMigrate(db); err != nil {
-		slog.Error("failed to migrate database", "err", err)
 		return
 	}
 	apiKeyRepo := repository.NewGormAPIKeyRepository(db)
