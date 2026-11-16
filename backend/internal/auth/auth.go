@@ -39,8 +39,8 @@ func (a *Service) WithTx(tx *gorm.DB) *Service {
 }
 
 func validateUsername(username string) error {
-	if len(username) < 8 {
-		return fmt.Errorf("length of the username (%d) is less than min %d: %w", len(username), 8, ErrInvalidUsername)
+	if len(username) < 1 {
+		return fmt.Errorf("length of the username (%d) is less than min %d: %w", len(username), 1, ErrInvalidUsername)
 	}
 
 	return nil

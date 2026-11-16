@@ -73,7 +73,7 @@ func TestCreateUserWithPasswordInvalidInputCreatesNothing(t *testing.T) {
 		name, accountName, username, password string
 		want                                  error
 	}{
-		{"short username", "foo-user", "foo", "foo-password", auth.ErrInvalidUsername},
+		{"short username", "foo-user", "", "foo-password", auth.ErrInvalidUsername},
 		{"short password", "foo-user", "foousername", "short", auth.ErrInvalidPassword},
 		// The account name is checked inside the transaction, so this exercises the rollback.
 		{"short account name", "foo", "foousername", "foo-password", accounts.ErrInvalidName},

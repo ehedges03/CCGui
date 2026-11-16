@@ -2,21 +2,27 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"connectrpc.com/connect"
 	"ehedges.net/ccgui/backend/gen/auth/v1/authv1connect"
 	"ehedges.net/ccgui/backend/gen/log/v1/logv1connect"
+	"ehedges.net/ccgui/backend/internal/accounts"
+	"ehedges.net/ccgui/backend/internal/auth"
 	"ehedges.net/ccgui/backend/internal/controller"
 	"ehedges.net/ccgui/backend/internal/db"
 	"ehedges.net/ccgui/backend/internal/repository"
 	"ehedges.net/ccgui/backend/internal/service"
 	"ehedges.net/ccgui/backend/internal/websocket"
+	cli "github.com/urfave/cli/v3"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -30,18 +36,96 @@ func main() {
 	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 
-	mux := http.NewServeMux()
-	if err := os.MkdirAll("data", 0o755); err != nil {
-		slog.Error("failed to create data directory", "err", err)
-		return
+	cmd := &cli.Command{
+		Name:           "ccgui",
+		Version:        "v0.1.0",
+		Usage:          "command line tool to configure and run ccgui",
+		DefaultCommand: "serve",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "db-path",
+				Aliases: []string{"db"},
+				Value:   "data/ccgui.db",
+				Usage:   "path to the sqlite database file",
+			},
+		},
+		Commands: []*cli.Command{
+			{
+				Name:  "serve",
+				Usage: "start the server",
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:    "port",
+						Aliases: []string{"p"},
+						Value:   8080,
+						Usage:   "port to listen on",
+						Local:   true,
+					},
+				},
+				Action: serve,
+			},
+			{
+				Name:  "users",
+				Usage: "user related controls",
+				Commands: []*cli.Command{
+					{
+						Name:  "create",
+						Usage: "create a new user",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "name",
+								Usage: "name of the new user",
+							},
+							&cli.StringFlag{
+								Name:  "username",
+								Usage: "username of the new user",
+							},
+						},
+						Action: createUser,
+					},
+				},
+			},
+		},
 	}
-	// DSN params apply to every pooled connection (a one-off PRAGMA would not).
-	// WAL + busy_timeout let log ingestion and token rotation write concurrently.
-	db, err := db.OpenSqliteDB("data/ccgui.db")
+
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		slog.Error("command failed", "err", err)
+	}
+}
+
+func openDatabase(path string) (*gorm.DB, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("failed to create data directory: %w", err)
+	}
+	return db.OpenSqliteDB(path)
+}
+
+func createUser(ctx context.Context, cmd *cli.Command) error {
+	gdb, err := openDatabase(cmd.String("db-path"))
 	if err != nil {
-		return
+		return err
 	}
-	apiKeyRepo := repository.NewGormAPIKeyRepository(db)
+	svc := auth.New(gdb, accounts.New(gdb))
+
+	p := newPrompter(os.Stdin, os.Stdout)
+	account, err := createUserFromInput(ctx, svc, p, cmd.String("name"), cmd.String("username"))
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Created user %s with account id %s\n", account.Name, account.ID)
+	return nil
+}
+
+func serve(ctx context.Context, cmd *cli.Command) error {
+	mux := http.NewServeMux()
+
+	dbPath := cmd.String("db-path")
+	gdb, err := openDatabase(dbPath)
+	if err != nil {
+		return err
+	}
+	apiKeyRepo := repository.NewGormAPIKeyRepository(gdb)
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
 	baseRouter := websocket.NewBaseRouter()
 	wsHub := websocket.NewHub(apiKeyService)
@@ -63,16 +147,18 @@ func main() {
 	)
 	mux.Handle(logServicePath, logServiceHandler)
 
+	port := cmd.Int("port")
 	srv := &http.Server{
-		Addr:              ":8080",
+		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           withLogging(withCORS(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	slog.Info("connectrpc server listening", "port", srv.Addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("server failed", "err", err)
+		return err
 	}
+	return nil
 }
 
 func withCORS(next http.Handler) http.Handler {

@@ -9,6 +9,8 @@ import (
 )
 
 func OpenSqliteDB(path string) (*gorm.DB, error) {
+	// DSN params apply to every pooled connection (a one-off PRAGMA would not).
+	// WAL + busy_timeout let log ingestion and token rotation write concurrently.
 	return openDB(sqlite.Open(path + "?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000"))
 }
 
