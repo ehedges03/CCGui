@@ -3,38 +3,23 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"go/types"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"ehedges.net/ccgui/backend/internal/db"
+	"ehedges.net/ccgui/backend/internal/db/dbtest"
 	"gorm.io/gorm"
 )
 
-// openTestDB opens a migrated database in a fresh temp dir, closed when the test ends.
-// Passes only a path: OpenDB itself is responsible for the connection settings.
-func openTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	gdb, err := db.OpenSqliteDB(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
-	}
-	sqlDB, err := gdb.DB()
-	if err != nil {
-		t.Fatalf("gdb.DB: %v", err)
-	}
-	t.Cleanup(func() { sqlDB.Close() })
-	return gdb
-}
-
 func TestConnectionSettings(t *testing.T) {
-	gdb := openTestDB(t)
+	gdb := dbtest.Open(t)
 	sqlDB, err := gdb.DB()
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +63,7 @@ func TestConnectionSettings(t *testing.T) {
 }
 
 func TestForeignKeysEnforced(t *testing.T) {
-	gdb := openTestDB(t)
+	gdb := dbtest.Open(t)
 
 	err := gdb.Create(&db.RefreshToken{
 		FamilyID: "no-such-family",
@@ -89,7 +74,7 @@ func TestForeignKeysEnforced(t *testing.T) {
 	if err == nil {
 		t.Fatal("insert with a dangling family_id succeeded, want a foreign key error")
 	}
-	if !strings.Contains(err.Error(), "FOREIGN KEY") {
+	if !errors.Is(err, gorm.ErrForeignKeyViolated) {
 		t.Fatalf("got %v, want a foreign key error", err)
 	}
 }
@@ -101,7 +86,7 @@ func TestTimesStoredInUTC(t *testing.T) {
 	time.Local = time.FixedZone("UTC-5", -5*60*60)
 	t.Cleanup(func() { time.Local = previous })
 
-	gdb := openTestDB(t)
+	gdb := dbtest.Open(t)
 	account := db.Account{Kind: db.AccountKindUser, Name: "utc-check"}
 	if err := gdb.Create(&account).Error; err != nil {
 		t.Fatal(err)
@@ -142,7 +127,7 @@ func TestEveryModelMigrated(t *testing.T) {
 		t.Fatal("found no TableName() methods in models.go")
 	}
 
-	gdb := openTestDB(t)
+	gdb := dbtest.Open(t)
 	for _, table := range tables {
 		if !gdb.Migrator().HasTable(table) {
 			t.Errorf("models.go defines table %q but it was not migrated", table)

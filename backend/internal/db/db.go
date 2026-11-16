@@ -1,7 +1,7 @@
 package db
 
 import (
-	"log/slog"
+	"fmt"
 	"time"
 
 	"gorm.io/driver/sqlite"
@@ -9,28 +9,27 @@ import (
 )
 
 func OpenSqliteDB(path string) (*gorm.DB, error) {
-	return openDB(path + "?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000")
+	return openDB(sqlite.Open(path + "?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000"))
 }
 
-func openDB(path string) (*gorm.DB, error) {
+func openDB(dialector gorm.Dialector) (*gorm.DB, error) {
 	db, err := gorm.Open(
-		sqlite.Open(path),
+		dialector,
 		&gorm.Config{
 			// Times are compared as text in SQLite, so store them all in UTC.
-			NowFunc: func() time.Time { return time.Now().UTC() },
+			NowFunc:        func() time.Time { return time.Now().UTC() },
+			TranslateError: true,
 		},
 	)
 
 	if err != nil {
-		slog.Error("failed to open database", "err", err)
-		return nil, err
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 
 	err = autoMigrate(db)
 
 	if err != nil {
-		slog.Error("failed to migrate database", "err", err)
-		return nil, err
+		return nil, fmt.Errorf("migrate database: %w", err)
 	}
 
 	return db, nil
