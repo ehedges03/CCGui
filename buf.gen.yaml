@@ -19,6 +19,7 @@ plugins:
     out: cc-tstl/src/gen
     opt:
       - onlyTypes=true
+      - useDate=string
       - useOptionals=all
       - stringEnums=true
       - forceLong=string

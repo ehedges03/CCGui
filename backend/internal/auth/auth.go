@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"ehedges.net/ccgui/backend/internal/accounts"
@@ -19,6 +20,11 @@ var (
 	ErrInvalidUsername        = errors.New("invalid username")
 	ErrInvalidPassword        = errors.New("invalid password")
 	ErrAccountDisabled        = errors.New("account disabled")
+	ErrIncorrectUsername      = errors.New("incorrect username")
+	ErrIncorrectPassword      = errors.New("incorrect password")
+	ErrFailedRehash           = errors.New("failed rehash")
+	ErrInvalidRefreshToken    = errors.New("invalid refresh token")
+	ErrEndingSession          = errors.New("ending session had issues")
 )
 
 // Service owns credentials. Create it with New.
@@ -230,6 +236,7 @@ func (a *Service) StartSession(ctx context.Context, accountID string, ip *string
 
 		at := &db.AccessToken{
 			AccountID:         accountID,
+			FamilyID:          rf.ID,
 			IssuedByRefreshID: rt.ID,
 			Hash:              hashToken(response.AccessToken),
 			ExpiresAt:         response.AccessTokenExpiry,
@@ -250,4 +257,96 @@ func (a *Service) StartSession(ctx context.Context, accountID string, ip *string
 	}
 
 	return &response, nil
+}
+
+func revokeFamily(ctx context.Context, conn *gorm.DB, now time.Time, familyID, reason string) error {
+	// Update refresh family
+	_, err := gorm.G[db.RefreshFamily](conn).Where("id = ?", familyID).Updates(ctx, db.RefreshFamily{RevokedAt: &now, RevokeReason: &reason})
+	if err != nil {
+		return fmt.Errorf("revoke refresh family: %w", err)
+	}
+
+	// Update refresh tokens
+	_, err = gorm.G[db.RefreshToken](conn).Where("family_id = ?", familyID).Updates(ctx, db.RefreshToken{State: db.RefreshTokenDead})
+	if err != nil {
+		return fmt.Errorf("revoke refresh tokens: %w", err)
+	}
+
+	// Update access tokens
+	_, err = gorm.G[db.AccessToken](conn).Where("family_id = ? and revoked_at IS NULL", familyID).Updates(ctx, db.AccessToken{RevokedAt: &now})
+	if err != nil {
+		return fmt.Errorf("revoke access tokens: %w", err)
+	}
+	return nil
+}
+
+func (a *Service) EndSession(ctx context.Context, refreshToken string, reason string) error {
+	now := a.now().UTC()
+	err := a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Get refresh token
+		rt, err := gorm.G[db.RefreshToken](tx).Preload("Family", nil).Where("hash = ?", hashToken(refreshToken)).First(ctx)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrInvalidRefreshToken
+		}
+		if err != nil {
+			return fmt.Errorf("get refresh token: %w", err)
+		}
+		if rt.Family.RevokedAt != nil {
+			return fmt.Errorf("session already ended: %w", ErrEndingSession)
+		}
+
+		return revokeFamily(ctx, tx, now, rt.FamilyID, reason)
+	})
+
+	return err
+}
+
+var dummyHash = sync.OnceValues(func() (string, error) {
+	return hashPassword("dummy-password")
+})
+
+func (a *Service) TryLogin(ctx context.Context, username, password string) (string, error) {
+	username = strings.ToLower(username)
+	login, err := gorm.G[db.Password](a.db).Where("username = ?", username).First(ctx)
+	if err != nil {
+		if hash, hashErr := dummyHash(); hashErr != nil {
+			slog.Error("build dummy hash", "err", hashErr)
+		} else if params, values, parseErr := parseEncodedHash(hash); parseErr == nil {
+			verifyPassword(password, params, values)
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrIncorrectUsername
+		}
+		return "", fmt.Errorf("get login %s: %w", username, err)
+	}
+
+	params, values, err := parseEncodedHash(login.PasswordHash)
+	if err != nil {
+		return "", err
+	}
+
+	validPass := verifyPassword(password, params, values)
+	if !validPass {
+		return "", ErrIncorrectPassword
+	}
+
+	if needRehash(params) {
+		newHash, err := hashPassword(password)
+
+		// Only update the password if the rehash doesn't fail
+		if err == nil {
+			var count int
+			count, err = gorm.G[db.Password](a.db).Where("account_id = ?", login.AccountID).Update(ctx, "password_hash", newHash)
+			if err == nil && count != 1 {
+				err = ErrFailedRehash
+			}
+		}
+		if err != nil {
+			slog.Error("failed to rehash", "username", username, "err", err)
+		} else {
+			slog.Info("succesfully rehashed", "username", username)
+		}
+	}
+
+	return login.AccountID, nil
 }

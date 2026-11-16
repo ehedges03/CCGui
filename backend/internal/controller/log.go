@@ -21,7 +21,7 @@ func NewLogController(logger *slog.Logger) *LogController {
 }
 
 func (c *LogController) ShipLogs(ctx context.Context, req *connect.Request[logv1.ShipLogsRequest]) (*connect.Response[logv1.ShipLogsResponse], error) {
-	keyID := KeyIDFromContext(ctx)
+	keyID := "sfasdfasdf"
 	handler := c.logger.Handler()
 
 	for _, entry := range req.Msg.GetEntries() {

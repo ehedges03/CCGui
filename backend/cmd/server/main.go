@@ -11,16 +11,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"connectrpc.com/connect"
 	"ehedges.net/ccgui/backend/gen/auth/v1/authv1connect"
 	"ehedges.net/ccgui/backend/gen/log/v1/logv1connect"
 	"ehedges.net/ccgui/backend/internal/accounts"
 	"ehedges.net/ccgui/backend/internal/auth"
 	"ehedges.net/ccgui/backend/internal/controller"
 	"ehedges.net/ccgui/backend/internal/db"
-	"ehedges.net/ccgui/backend/internal/repository"
-	"ehedges.net/ccgui/backend/internal/service"
-	"ehedges.net/ccgui/backend/internal/websocket"
 	cli "github.com/urfave/cli/v3"
 	"gorm.io/gorm"
 )
@@ -125,25 +121,13 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	apiKeyRepo := repository.NewGormAPIKeyRepository(gdb)
-	apiKeyService := service.NewAPIKeyService(apiKeyRepo)
-	baseRouter := websocket.NewBaseRouter()
-	wsHub := websocket.NewHub(apiKeyService)
-	wsHub.SetRouter(baseRouter)
-	deleteCh, deleteUnsub := apiKeyService.SubscribeDeletes()
-	defer deleteUnsub()
-	go func() {
-		for id := range deleteCh {
-			wsHub.CloseByKeyID(id)
-		}
-	}()
-	mux.HandleFunc("/ws", wsHub.HandleWS)
-	authController := controller.NewAuthController(apiKeyService)
-	authHandlerPath, authHandler := authv1connect.NewAuthServiceHandler(authController)
+	accountsService := accounts.New(gdb)
+	authService := auth.New(gdb, accountsService, time.Now)
+	authAPIHandler := auth.NewAPIHandler(authService)
+	authHandlerPath, authHandler := authv1connect.NewAuthServiceHandler(authAPIHandler)
 	mux.Handle(authHandlerPath, authHandler)
 	logServicePath, logServiceHandler := logv1connect.NewLogServiceHandler(
 		controller.NewLogController(slog.Default()),
-		connect.WithInterceptors(controller.NewAPIKeyInterceptor(apiKeyService)),
 	)
 	mux.Handle(logServicePath, logServiceHandler)
 

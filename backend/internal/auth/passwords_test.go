@@ -22,10 +22,10 @@ func TestHashPasswordRoundTrip(t *testing.T) {
 	if *params != currentParams {
 		t.Errorf("parsed params %+v, want currentParams %+v", *params, currentParams)
 	}
-	if !verifyPassword("foo-password", *params, *values) {
+	if !verifyPassword("foo-password", params, values) {
 		t.Error("the correct password did not verify")
 	}
-	if verifyPassword("bar-password", *params, *values) {
+	if verifyPassword("bar-password", params, values) {
 		t.Error("a wrong password verified")
 	}
 
@@ -117,7 +117,7 @@ func TestNeedRehash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if needRehash(*params) {
+	if needRehash(params) {
 		t.Error("a freshly made hash reports needing a rehash")
 	}
 
@@ -130,8 +130,8 @@ func TestNeedRehash(t *testing.T) {
 	}
 	for name, change := range changed {
 		t.Run(name, func(t *testing.T) {
-			p := *params
-			change(&p)
+			p := params
+			change(p)
 			if !needRehash(p) {
 				t.Errorf("params with a different %s do not report needing a rehash", name)
 			}

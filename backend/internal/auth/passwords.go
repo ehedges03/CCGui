@@ -106,12 +106,12 @@ func hashPassword(password string) (string, error) {
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, currentParams.memory, currentParams.time, currentParams.threads, b64Salt, b64Hash), nil
 }
 
-func verifyPassword(password string, params hashParams, values hashValues) bool {
+func verifyPassword(password string, params *hashParams, values *hashValues) bool {
 	computedHash := argon2.IDKey([]byte(password), values.salt, params.time, params.memory, params.threads, params.keyLen)
 
 	return subtle.ConstantTimeCompare(values.expectedHash, computedHash) == 1
 }
 
-func needRehash(params hashParams) bool {
-	return params != currentParams
+func needRehash(params *hashParams) bool {
+	return *params != currentParams
 }

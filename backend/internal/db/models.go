@@ -204,12 +204,14 @@ func (RefreshToken) TableName() string { return "refresh_tokens" }
 // FirstUsedAt lets the "child never used" rule cover the access token too.
 type AccessToken struct {
 	UUIDKey
-	AccountID         string        `gorm:"type:text;not null;index"`
-	Account           *Account      `gorm:"constraint:OnDelete:CASCADE"`
-	IssuedByRefreshID string        `gorm:"type:text;not null;index"`
-	IssuedByRefresh   *RefreshToken `gorm:"foreignKey:IssuedByRefreshID;constraint:OnDelete:NO ACTION"`
-	Hash              string        `gorm:"uniqueIndex;not null"`
-	ExpiresAt         time.Time     `gorm:"not null;index"`
+	AccountID         string         `gorm:"type:text;not null;index"`
+	Account           *Account       `gorm:"constraint:OnDelete:CASCADE"`
+	FamilyID          string         `gorm:"type:text;not null;index"`
+	Family            *RefreshFamily `gorm:"constraint:OnDelete:CASCADE"`
+	IssuedByRefreshID string         `gorm:"type:text;not null;index"`
+	IssuedByRefresh   *RefreshToken  `gorm:"foreignKey:IssuedByRefreshID;constraint:OnDelete:NO ACTION"`
+	Hash              string         `gorm:"uniqueIndex;not null"`
+	ExpiresAt         time.Time      `gorm:"not null;index"`
 	FirstUsedAt       *time.Time
 	// Set in the same transaction that revokes the family or disables the
 	// account, so a request only checks this row.
