@@ -105,7 +105,7 @@ func createUser(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
-	svc := auth.New(gdb, accounts.New(gdb))
+	svc := auth.New(gdb, accounts.New(gdb), time.Now)
 
 	p := newPrompter(os.Stdin, os.Stdout)
 	account, err := createUserFromInput(ctx, svc, p, cmd.String("name"), cmd.String("username"))

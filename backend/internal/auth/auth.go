@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"ehedges.net/ccgui/backend/internal/accounts"
 	"ehedges.net/ccgui/backend/internal/db"
@@ -16,18 +18,24 @@ var (
 	ErrUserAlreadyHasPassword = errors.New("account already has a password")
 	ErrInvalidUsername        = errors.New("invalid username")
 	ErrInvalidPassword        = errors.New("invalid password")
+	ErrAccountDisabled        = errors.New("account disabled")
 )
 
 // Service owns credentials. Create it with New.
 type Service struct {
 	db       *gorm.DB
 	accounts *accounts.Service
+	now      func() time.Time
 }
 
-func New(db *gorm.DB, accountsService *accounts.Service) *Service {
+func New(db *gorm.DB, accountsService *accounts.Service, now func() time.Time) *Service {
+	if now == nil {
+		now = time.Now
+	}
 	return &Service{
 		db:       db,
 		accounts: accountsService,
+		now:      now,
 	}
 }
 
@@ -135,4 +143,111 @@ func (a *Service) CreateUserWithPassword(ctx context.Context, name, username, pa
 	}
 
 	return userAccount, nil
+}
+
+type IssuedTokens struct {
+	RefreshToken      string
+	AccessToken       string
+	AccessTokenExpiry time.Time
+}
+
+// redactToken keeps only the prefix (e.g. "ccr_") so logs show which kind of
+// token it was without leaking it.
+func redactToken(token string) string {
+	if i := strings.IndexByte(token, '_'); i >= 0 {
+		return token[:i+1] + "[redacted]"
+	}
+	return "[redacted]"
+}
+
+// String keeps the plaintext tokens out of fmt output (%v, %s, %+v).
+func (t IssuedTokens) String() string {
+	return fmt.Sprintf("IssuedTokens{RefreshToken: %s, AccessToken: %s, AccessTokenExpiry: %s}",
+		redactToken(t.RefreshToken), redactToken(t.AccessToken), t.AccessTokenExpiry.Format(time.RFC3339))
+}
+
+// LogValue keeps the plaintext tokens out of slog output, for both the text and
+// JSON handlers.
+func (t IssuedTokens) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("refresh_token", redactToken(t.RefreshToken)),
+		slog.String("access_token", redactToken(t.AccessToken)),
+		slog.Time("access_token_expiry", t.AccessTokenExpiry),
+	)
+}
+
+const accessTokenTTL = 10 * time.Minute
+
+func (a *Service) StartSession(ctx context.Context, accountID string, ip *string) (*IssuedTokens, error) {
+	var err error
+	now := a.now().UTC()
+	response := IssuedTokens{
+		AccessTokenExpiry: now.Add(accessTokenTTL),
+	}
+	response.RefreshToken, err = generateToken("ccr")
+	if err != nil {
+		return nil, err
+	}
+	response.AccessToken, err = generateToken("cca")
+	if err != nil {
+		return nil, err
+	}
+	err = a.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		account, err := a.accounts.WithTx(tx).GetAccount(ctx, accountID)
+		if err != nil {
+			return err
+		}
+
+		if account.DisabledAt != nil {
+			return ErrAccountDisabled
+		}
+
+		rf := &db.RefreshFamily{
+			AccountID: accountID,
+			BoundIP:   ip,
+			CreatedAt: now,
+		}
+
+		err = gorm.G[db.RefreshFamily](tx).Create(ctx, rf)
+
+		if err != nil {
+			return fmt.Errorf("create refresh family: %w", err)
+		}
+
+		rt := &db.RefreshToken{
+			FamilyID:   rf.ID,
+			Generation: 0,
+			Hash:       hashToken(response.RefreshToken),
+			State:      db.RefreshTokenIssued,
+			IssuedAt:   now,
+		}
+
+		err = gorm.G[db.RefreshToken](tx).Create(ctx, rt)
+
+		if err != nil {
+			return fmt.Errorf("create refresh token: %w", err)
+		}
+
+		at := &db.AccessToken{
+			AccountID:         accountID,
+			IssuedByRefreshID: rt.ID,
+			Hash:              hashToken(response.AccessToken),
+			ExpiresAt:         response.AccessTokenExpiry,
+			CreatedAt:         now,
+		}
+
+		err = gorm.G[db.AccessToken](tx).Create(ctx, at)
+
+		if err != nil {
+			return fmt.Errorf("create access token: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"ehedges.net/ccgui/backend/internal/accounts"
 	"ehedges.net/ccgui/backend/internal/auth"
@@ -15,7 +16,7 @@ import (
 func newAuthService(t *testing.T) (*auth.Service, *gorm.DB) {
 	t.Helper()
 	gdb := dbtest.Open(t)
-	return auth.New(gdb, accounts.New(gdb)), gdb
+	return auth.New(gdb, accounts.New(gdb), time.Now), gdb
 }
 
 func TestCreateUserFromInputPromptsForEverything(t *testing.T) {

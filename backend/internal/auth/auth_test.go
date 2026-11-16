@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"ehedges.net/ccgui/backend/internal/accounts"
 	"ehedges.net/ccgui/backend/internal/auth"
@@ -16,7 +17,7 @@ func newServices(t *testing.T) (*auth.Service, *accounts.Service, *gorm.DB) {
 	t.Helper()
 	gdb := dbtest.Open(t)
 	acc := accounts.New(gdb)
-	return auth.New(gdb, acc), acc, gdb
+	return auth.New(gdb, acc, time.Now), acc, gdb
 }
 
 func countAccounts(t *testing.T, gdb *gorm.DB) int64 {

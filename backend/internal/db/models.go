@@ -206,7 +206,7 @@ type AccessToken struct {
 	UUIDKey
 	AccountID         string        `gorm:"type:text;not null;index"`
 	Account           *Account      `gorm:"constraint:OnDelete:CASCADE"`
-	IssuedByRefreshID *string       `gorm:"type:text;index"` // nil for user API key exchanges, if ever added
+	IssuedByRefreshID string        `gorm:"type:text;not null;index"`
 	IssuedByRefresh   *RefreshToken `gorm:"foreignKey:IssuedByRefreshID;constraint:OnDelete:NO ACTION"`
 	Hash              string        `gorm:"uniqueIndex;not null"`
 	ExpiresAt         time.Time     `gorm:"not null;index"`
