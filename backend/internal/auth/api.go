@@ -35,7 +35,7 @@ func internalError(ctx context.Context, msg string, err error) *connect.Error {
 func (a *APIHandler) Login(ctx context.Context, req *connect.Request[authv1.LoginRequest]) (*connect.Response[authv1.IssuedTokensResponse], error) {
 	accountID, err := a.service.TryLogin(ctx, req.Msg.Username, req.Msg.Password)
 	switch {
-	case errors.Is(err, ErrIncorrectUsername), errors.Is(err, ErrIncorrectPassword):
+	case errors.Is(err, ErrUnauthenticated):
 		slog.WarnContext(ctx, "failed login", "username", req.Msg.Username, "err", err)
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrInvalidLogin)
 	case err != nil:
@@ -61,7 +61,7 @@ func (a *APIHandler) Login(ctx context.Context, req *connect.Request[authv1.Logi
 func (a *APIHandler) Logout(ctx context.Context, req *connect.Request[authv1.LogoutRequest]) (*connect.Response[emptypb.Empty], error) {
 	err := a.service.EndSession(ctx, req.Msg.RefreshToken, "logout")
 	switch {
-	case errors.Is(err, ErrInvalidRefreshToken), errors.Is(err, ErrEndingSession):
+	case errors.Is(err, ErrUnauthenticated):
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrInvalidRefreshToken)
 	case err != nil:
 		return nil, internalError(ctx, "end session", err)

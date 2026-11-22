@@ -21,7 +21,6 @@ func NewLogController(logger *slog.Logger) *LogController {
 }
 
 func (c *LogController) ShipLogs(ctx context.Context, req *connect.Request[logv1.ShipLogsRequest]) (*connect.Response[logv1.ShipLogsResponse], error) {
-	keyID := "sfasdfasdf"
 	handler := c.logger.Handler()
 
 	for _, entry := range req.Msg.GetEntries() {
@@ -30,7 +29,6 @@ func (c *LogController) ShipLogs(ctx context.Context, req *connect.Request[logv1
 			continue
 		}
 		record := slog.NewRecord(time.UnixMilli(entry.GetTimeUnixMs()), level, entry.GetMessage(), 0)
-		record.AddAttrs(slog.String("key_id", keyID))
 		attrs := entry.GetAttrs()
 		for _, key := range slices.Sorted(maps.Keys(attrs)) {
 			record.AddAttrs(slog.String(key, attrs[key]))

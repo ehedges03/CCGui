@@ -17,9 +17,45 @@ import (
 	"ehedges.net/ccgui/backend/internal/auth"
 	"ehedges.net/ccgui/backend/internal/controller"
 	"ehedges.net/ccgui/backend/internal/db"
+	"github.com/google/uuid"
 	cli "github.com/urfave/cli/v3"
 	"gorm.io/gorm"
 )
+
+type contextHandler struct {
+	slog.Handler
+}
+
+func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
+	if requestTrace, ok := RequestTraceFromContext(ctx); ok {
+		r.AddAttrs(
+			slog.Group("request_trace",
+				slog.String("request_id", requestTrace.RequestID),
+				slog.String("method", requestTrace.Method),
+				slog.String("path", requestTrace.Path),
+			),
+		)
+	}
+
+	if principal, err := auth.PrincipalFromContext(ctx); err == nil {
+		r.AddAttrs(
+			slog.Group("auth",
+				slog.String("account_id", principal.ID),
+				slog.String("refresh_family_id", principal.RefreshFamilyID),
+				slog.String("access_token_id", principal.AccessTokenID),
+			),
+		)
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h *contextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &contextHandler{Handler: h.Handler.WithAttrs(attrs)}
+}
+
+func (h *contextHandler) WithGroup(name string) slog.Handler {
+	return &contextHandler{Handler: h.Handler.WithGroup(name)}
+}
 
 func main() {
 	var programLevel slog.LevelVar
@@ -29,7 +65,7 @@ func main() {
 		Level: &programLevel,
 	})
 
-	logger := slog.New(logHandler)
+	logger := slog.New(&contextHandler{Handler: logHandler})
 	slog.SetDefault(logger)
 
 	cmd := &cli.Command{
@@ -133,8 +169,14 @@ func serve(ctx context.Context, cmd *cli.Command) error {
 
 	port := cmd.Int("port")
 	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           withLogging(withCORS(mux)),
+		Addr: fmt.Sprintf(":%d", port),
+		// Seperate resolve from check to support logging with account information and keep logging of failed auth
+		Handler: withRequestTracing(
+			auth.WithResolvedAuth(
+				withLogging(withCORS(auth.WithCheckedAuth(mux))),
+				authService,
+			),
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -188,11 +230,39 @@ func withLogging(next http.Handler) http.Handler {
 			status:         http.StatusOK,
 		}
 		next.ServeHTTP(recorder, r)
-		slog.Info("request",
-			"method", r.Method,
-			"path", r.URL.Path,
+		slog.InfoContext(r.Context(), "request",
 			"status", recorder.status,
 			"duration", time.Since(start),
 		)
+	})
+}
+
+type RequestTrace struct {
+	RequestID string
+	Method    string
+	Path      string
+}
+
+type contextKey struct{}
+
+var requestTraceContextKey = contextKey{}
+
+func RequestTraceFromContext(ctx context.Context) (*RequestTrace, bool) {
+	requestTrace, ok := ctx.Value(requestTraceContextKey).(*RequestTrace)
+	return requestTrace, ok
+}
+
+func withRequestTracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqID := uuid.NewString()
+		w.Header().Set("X-Request-ID", reqID)
+
+		requestTrace := RequestTrace{
+			RequestID: reqID,
+			Method:    r.Method,
+			Path:      r.URL.Path,
+		}
+		ctx := context.WithValue(r.Context(), requestTraceContextKey, &requestTrace)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

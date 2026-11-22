@@ -12,19 +12,25 @@ import (
 	"ehedges.net/ccgui/backend/internal/accounts"
 	"ehedges.net/ccgui/backend/internal/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
 	ErrUsernameTaken          = errors.New("username already taken")
 	ErrUserAlreadyHasPassword = errors.New("account already has a password")
+	ErrUnauthenticated        = errors.New("unauthenticated")
 	ErrInvalidUsername        = errors.New("invalid username")
 	ErrInvalidPassword        = errors.New("invalid password")
-	ErrAccountDisabled        = errors.New("account disabled")
-	ErrIncorrectUsername      = errors.New("incorrect username")
-	ErrIncorrectPassword      = errors.New("incorrect password")
+	ErrAccountDisabled        = fmt.Errorf("%w: account disabled", ErrUnauthenticated)
+	ErrIncorrectUsername      = fmt.Errorf("%w: incorrect username", ErrUnauthenticated)
+	ErrIncorrectPassword      = fmt.Errorf("%w: incorrect password", ErrUnauthenticated)
 	ErrFailedRehash           = errors.New("failed rehash")
-	ErrInvalidRefreshToken    = errors.New("invalid refresh token")
-	ErrEndingSession          = errors.New("ending session had issues")
+	ErrInvalidRefreshToken    = fmt.Errorf("%w: invalid refresh token", ErrUnauthenticated)
+	ErrInvalidAccessToken     = fmt.Errorf("%w: invalid access token", ErrUnauthenticated)
+	ErrEndingSession          = fmt.Errorf("%w: session already ended", ErrUnauthenticated)
+	ErrAccessTokenExpired     = fmt.Errorf("%w: access token expired", ErrUnauthenticated)
+	ErrInvalidSessionIP       = fmt.Errorf("%w: invalid ip for session", ErrUnauthenticated)
+	ErrSessionRevoked         = fmt.Errorf("%w: session token revoked", ErrUnauthenticated)
 )
 
 // Service owns credentials. Create it with New.
@@ -294,6 +300,10 @@ func (a *Service) EndSession(ctx context.Context, refreshToken string, reason st
 		if rt.Family.RevokedAt != nil {
 			return fmt.Errorf("session already ended: %w", ErrEndingSession)
 		}
+		// TODO: better handle this panic state where the token has been stolen
+		if rt.UsedAt != nil {
+			return revokeFamily(ctx, tx, now, rt.FamilyID, "shared refresh token")
+		}
 
 		return revokeFamily(ctx, tx, now, rt.FamilyID, reason)
 	})
@@ -349,4 +359,54 @@ func (a *Service) TryLogin(ctx context.Context, username, password string) (stri
 	}
 
 	return login.AccountID, nil
+}
+
+func (a *Service) Authenticate(ctx context.Context, accessToken string, ip *string) (*db.AccessToken, error) {
+	now := a.now().UTC()
+	hashedToken := hashToken(accessToken)
+	token, err := gorm.G[db.AccessToken](a.db).
+		Joins(clause.JoinTarget{Association: "Account"}, nil).
+		Joins(clause.JoinTarget{Association: "Family"}, nil).
+		Where("access_tokens.hash = ?", hashedToken).First(ctx)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrInvalidAccessToken
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get access token: %w", err)
+	}
+
+	if token.Family == nil {
+		return nil, fmt.Errorf("access token %s has no family", token.ID)
+	}
+
+	if token.RevokedAt != nil || token.Family.RevokedAt != nil {
+		return nil, ErrSessionRevoked
+	}
+
+	if token.Family.BoundIP != nil && (ip == nil || *token.Family.BoundIP != *ip) {
+		return nil, ErrInvalidSessionIP
+	}
+
+	if token.Account == nil {
+		return nil, fmt.Errorf("access token %s has no account", token.ID)
+	}
+
+	if token.Account.DisabledAt != nil {
+		return nil, ErrAccountDisabled
+	}
+
+	if !token.ExpiresAt.After(now) {
+		return nil, ErrAccessTokenExpired
+	}
+
+	if token.FirstUsedAt == nil {
+		_, err = gorm.G[db.AccessToken](a.db).Where("id = ? AND first_used_at IS NULL", token.ID).Update(ctx, "first_used_at", now)
+
+		if err != nil {
+			return nil, fmt.Errorf("update access token first used at: %w", err)
+		}
+		token.FirstUsedAt = &now
+	}
+
+	return &token, nil
 }
